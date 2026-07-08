@@ -84,7 +84,7 @@ public final class IdempotentConsumeAspect {
      * @return 原方法执行结果；若已消费则返回 {@code null}
      * @throws Throwable 原方法执行异常或幂等异常
      */
-    @Around("@annotation(com.nageoffer.ai.ragent.framework.idempotent.IdempotentConsume)")
+    @Around("@annotation(com.hjs.study.ragent.framework.idempotent.IdempotentConsume)")
     public Object idempotentConsume(ProceedingJoinPoint joinPoint) throws Throwable {
         IdempotentConsume idempotentConsume = getIdempotentConsumeAnnotation(joinPoint);
         // 通过“前缀 + SpEL 解析结果”构造本次消息消费的唯一幂等标识
