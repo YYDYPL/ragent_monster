@@ -1,0 +1,306 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.hjs.study</groupId>
+    <artifactId>ragent_monster</artifactId>
+    <version>1.0-SNAPSHOT</version>
+
+    <description>
+        RAG综合智能体 - 基于Spring Boot的智能文档处理与检索系统，集成向量数据库，拥有智能问答、知识库、会话记忆、深度思考等功能
+    </description>
+    <!-- 统一管理全项目的基础版本号，子模块可直接复用这些属性 -->
+    <properties>
+        <!-- JDK 版本 -->
+        <java.version>17</java.version>
+        <!-- Spring Boot 版本，同时也会影响其 BOM 中托管的常用依赖版本 -->
+        <spring-boot.version>3.5.7</spring-boot.version>
+        <!-- 向量数据库 Milvus Java SDK -->
+        <milvus-sdk.version>2.6.6</milvus-sdk.version>
+        <!-- 文档解析框架 Apache Tika -->
+        <tika.version>3.2.3</tika.version>
+        <!-- Hutool 工具包 -->
+        <hutool-all.version>5.8.37</hutool-all.version>
+        <!-- MyBatis-Plus 版本 -->
+        <mybatis-plus-spring-boot3-starter.version>3.5.14</mybatis-plus-spring-boot3-starter.version>
+        <!-- AWS S3 SDK -->
+        <s3.version>2.40.2</s3.version>
+        <!-- Mockito 测试框架 -->
+        <mockito-core.version>5.20.0</mockito-core.version>
+        <!-- Sa-Token 权限认证框架 -->
+        <sa-token.version>1.43.0</sa-token.version>
+        <!-- 阿里 TTL，用于在线程池中传递 ThreadLocal 上下文 -->
+        <transmittable-thread-local.version>2.14.5</transmittable-thread-local.version>
+        <!-- Redisson 版本 -->
+        <redisson.version>4.0.0</redisson.version>
+        <!-- RocketMQ Spring Boot Starter -->
+        <rocketmq-spring-boot-starter.version>2.3.5</rocketmq-spring-boot-starter.version>
+        <!-- Markdown 解析组件 -->
+        <commonmark.version>0.22.0</commonmark.version>
+        <!-- SVG/图形处理组件 Apache Batik -->
+        <batik.version>1.18</batik.version>
+        <!-- OkHttp HTTP 客户端 -->
+        <okhttp.version>4.12.0</okhttp.version>
+        <!-- MCP Java SDK -->
+        <mcp-sdk.version>1.1.2</mcp-sdk.version>
+        <!-- Spotless 代码格式化插件 -->
+        <spotless-maven-plugin.version>2.22.1</spotless-maven-plugin.version>
+    </properties>
+
+    <!-- 依赖版本托管区：这里只管版本，不代表当前父模块一定会直接引入这些依赖 -->
+    <dependencyManagement>
+        <dependencies>
+            <!-- 导入 Spring Boot 官方 BOM，统一大量 Spring 生态依赖版本 -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- 导入 Tika BOM，统一 Tika 相关组件版本 -->
+            <dependency>
+                <groupId>org.apache.tika</groupId>
+                <artifactId>tika-bom</artifactId>
+                <version>${tika.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- Milvus 向量数据库客户端 -->
+            <dependency>
+                <groupId>io.milvus</groupId>
+                <artifactId>milvus-sdk-java</artifactId>
+                <version>${milvus-sdk.version}</version>
+            </dependency>
+
+            <!-- Hutool 常用工具类集合 -->
+            <dependency>
+                <groupId>cn.hutool</groupId>
+                <artifactId>hutool-all</artifactId>
+                <version>${hutool-all.version}</version>
+            </dependency>
+
+            <!-- MyBatis-Plus Spring Boot Starter -->
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+                <version>${mybatis-plus-spring-boot3-starter.version}</version>
+            </dependency>
+
+            <!-- MyBatis-Plus 对 JSqlParser 的支持，常用于分页/SQL 解析 -->
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>mybatis-plus-jsqlparser</artifactId>
+                <version>${mybatis-plus-spring-boot3-starter.version}</version>
+            </dependency>
+
+            <!-- AWS S3 对象存储客户端 -->
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>s3</artifactId>
+                <version>${s3.version}</version>
+            </dependency>
+
+            <!-- Mockito 单元测试依赖 -->
+            <dependency>
+                <groupId>org.mockito</groupId>
+                <artifactId>mockito-core</artifactId>
+                <version>${mockito-core.version}</version>
+                <scope>test</scope>
+            </dependency>
+
+            <!-- Sa-Token 与 Spring Boot 3 集成 -->
+            <dependency>
+                <groupId>cn.dev33</groupId>
+                <artifactId>sa-token-spring-boot3-starter</artifactId>
+                <version>${sa-token.version}</version>
+            </dependency>
+
+            <!-- Sa-Token 基于 RedisTemplate 的会话/令牌存储支持 -->
+            <dependency>
+                <groupId>cn.dev33</groupId>
+                <artifactId>sa-token-redis-template</artifactId>
+                <version>${sa-token.version}</version>
+            </dependency>
+
+            <!-- 线程池场景下传递上下文 -->
+            <dependency>
+                <groupId>com.alibaba</groupId>
+                <artifactId>transmittable-thread-local</artifactId>
+                <version>${transmittable-thread-local.version}</version>
+            </dependency>
+
+            <!-- Redisson 与 Spring Boot 集成 -->
+            <dependency>
+                <groupId>org.redisson</groupId>
+                <artifactId>redisson-spring-boot-starter</artifactId>
+                <version>${redisson.version}</version>
+            </dependency>
+
+            <!-- RocketMQ 与 Spring Boot 集成 -->
+            <dependency>
+                <groupId>org.apache.rocketmq</groupId>
+                <artifactId>rocketmq-spring-boot-starter</artifactId>
+                <version>${rocketmq-spring-boot-starter.version}</version>
+            </dependency>
+
+            <!-- Markdown 基础解析 -->
+            <dependency>
+                <groupId>org.commonmark</groupId>
+                <artifactId>commonmark</artifactId>
+                <version>${commonmark.version}</version>
+            </dependency>
+
+            <!-- Markdown GFM 表格扩展 -->
+            <dependency>
+                <groupId>org.commonmark</groupId>
+                <artifactId>commonmark-ext-gfm-tables</artifactId>
+                <version>${commonmark.version}</version>
+            </dependency>
+
+            <!-- SVG 转换核心组件 -->
+            <dependency>
+                <groupId>org.apache.xmlgraphics</groupId>
+                <artifactId>batik-transcoder</artifactId>
+                <version>${batik.version}</version>
+            </dependency>
+
+            <!-- 图像编解码组件 -->
+            <dependency>
+                <groupId>org.apache.xmlgraphics</groupId>
+                <artifactId>batik-codec</artifactId>
+                <version>${batik.version}</version>
+            </dependency>
+
+            <!-- HTTP 客户端 -->
+            <dependency>
+                <groupId>com.squareup.okhttp3</groupId>
+                <artifactId>okhttp</artifactId>
+                <version>${okhttp.version}</version>
+            </dependency>
+
+            <!-- MCP 协议核心 SDK -->
+            <dependency>
+                <groupId>io.modelcontextprotocol.sdk</groupId>
+                <artifactId>mcp</artifactId>
+                <version>${mcp-sdk.version}</version>
+            </dependency>
+
+            <!-- MCP 的 Jackson JSON 支持 -->
+            <dependency>
+                <groupId>io.modelcontextprotocol.sdk</groupId>
+                <artifactId>mcp-json-jackson2</artifactId>
+                <version>${mcp-sdk.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <!-- 父模块自身直接依赖：这些依赖当前 pom 也会真正参与构建 -->
+    <dependencies>
+        <!-- Spring Boot 基础启动依赖 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+        </dependency>
+
+        <!-- Spring Boot 测试依赖，提供 JUnit、AssertJ、Mock 等常用测试能力 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Lombok：用于减少样板代码，如 getter/setter/构造器 -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+        </dependency>
+    </dependencies>
+
+    <!-- 构建配置区：统一 Maven 插件行为 -->
+    <build>
+        <!-- 插件版本托管区：子模块可复用这里声明的插件版本与默认配置 -->
+        <pluginManagement>
+            <plugins>
+                <!-- Spring Boot 打包插件：repackage 会把 jar 重新打成可执行的 Spring Boot Jar -->
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                    <version>${spring-boot.version}</version>
+                    <executions>
+                        <execution>
+                            <goals>
+                                <goal>repackage</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+
+        <!-- 当前父工程直接生效的插件 -->
+        <plugins>
+            <!-- Java 编译插件：指定源码版本、目标字节码版本、编码等 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                    <encoding>UTF-8</encoding>
+                    <parameters>true</parameters>
+                </configuration>
+            </plugin>
+
+            <!-- 将依赖信息转换成属性，供其他插件（如 surefire）引用 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>properties</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- 测试执行插件：这里给 JVM 增加 Mockito 的 javaagent，支持更强的 mock 能力 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <argLine>@{argLine} -javaagent:${org.mockito:mockito-core:jar}</argLine>
+                </configuration>
+            </plugin>
+
+            <!-- 代码格式化插件：在 compile 阶段自动应用格式和版权头 -->
+            <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+                <version>${spotless-maven-plugin.version}</version>
+                <configuration>
+                    <java>
+                        <licenseHeader>
+                            <!-- ${maven.multiModuleProjectDirectory} 爆红属于正常，并不影响编译或者运行，忽略就好 -->
+                            <file>${maven.multiModuleProjectDirectory}/resources/format/copyright.txt</file>
+                        </licenseHeader>
+                    </java>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>apply</goal>
+                        </goals>
+                        <phase>compile</phase>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
+
