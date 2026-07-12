@@ -14,6 +14,9 @@
     </description>
     <modules>
         <module>framework</module>
+        <module>infra-ai</module>
+        <module>bootstrap</module>
+        <module>mcp-server</module>
     </modules>
     <!-- 统一管理全项目的基础版本号，子模块可直接复用这些属性 -->
     <properties>

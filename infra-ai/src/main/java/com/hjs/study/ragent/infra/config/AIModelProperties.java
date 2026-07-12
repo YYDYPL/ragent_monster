@@ -1,0 +1,91 @@
+package com.hjs.study.ragent.infra.config;
+
+import cn.hutool.crypto.Mode;
+import lombok.Data;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.context.annotation.Configuration;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+@Data
+@Configuration
+@ConfigurationProperties(prefix = "ai")
+public class AIModelProperties {
+
+    private Map<String,ProviderConfig> providers=new HashMap<>();
+
+    private ModelGroup chat =new ModelGroup();
+
+    private ModelGroup embedding =new ModelGroup();
+
+    private ModelGroup rerank =new ModelGroup();
+
+
+    private ModelGroup vlm=new ModelGroup();
+
+    private Selection selection=new Selection();
+
+    private Stream stream= new Stream();
+
+
+
+
+    @Data
+    public static class ModelGroup{
+
+        private String defaultModel;
+
+        private String deepThinkingModel;
+
+        private List<ModelCandidate> candidates =new ArrayList<>();
+
+    }
+
+    @Data
+    public static class ModelCandidate{
+
+        private String id;
+
+        private String provider;
+
+        private String model;
+
+        private String url;
+
+        private Integer dimension;
+
+        private Integer priority = 100;
+
+        private Boolean enable=true;
+
+        private Boolean supportsThinking =false;
+    }
+
+    @Data
+    public static class ProviderConfig{
+
+        private String url;
+
+        private String apiKey;
+
+        private Map<String,String> endPoints=new HashMap<>();
+    }
+
+    @Data
+    public static class Selection{
+
+        private Integer failureThreshold=2;
+
+        private Long openDurationMs=30000L;
+
+    }
+
+    @Data
+    public static class Stream{
+
+        private Integer messageChunkSize=-5;
+    }
+}
