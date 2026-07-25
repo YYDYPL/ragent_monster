@@ -71,7 +71,7 @@ public class AIModelProperties {
 
         private String apiKey;
 
-        private Map<String,String> endPoints=new HashMap<>();
+        private Map<String,String> endpoints=new HashMap<>();
     }
 
     @Data

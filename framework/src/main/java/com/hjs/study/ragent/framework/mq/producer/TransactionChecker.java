@@ -15,27 +15,23 @@
  * limitations under the License.
  */
 
-package com.hjs.study.ragent.framework.idempotent;
+package com.hjs.study.ragent.framework.mq.producer;
 
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
+import com.hjs.study.ragent.framework.mq.MessageWrapper;
 
 /**
- * 幂等注解，防止用户重复提交表单信息
+ * 事务消息回查接口，按 topic 注册到 {@link DelegatingTransactionListener}。
+ * <p>
+ * 回查时 Broker 可能将请求发送到任意实例，因此实现类必须基于消息内容（而非内存状态）查询 DB 判断本地事务是否已提交。
+ * 这是事务消息在多实例与重启后仍然可靠的关键约束。
  */
-@Target(ElementType.METHOD)
-@Retention(RetentionPolicy.RUNTIME)
-public @interface IdempotentSubmit {
+public interface TransactionChecker {
 
     /**
-     * 通过 SpEL 表达式生成的唯一 Key，优先级高于默认幂等逻辑
+     * 检查本地事务是否已提交
+     *
+     * @param message 消息体，包含业务载荷，可从中提取业务参数查询 DB
+     * @return true 表示本地事务已提交（消息可投递），false 表示已回滚（消息丢弃）
      */
-    String key() default "";
-
-    /**
-     * 触发幂等失败逻辑时，返回的错误提示信息
-     */
-    String message() default "您操作太快，请稍后再试";
+    boolean check(MessageWrapper<?> message);
 }

@@ -17,56 +17,35 @@
 
 package com.hjs.study.ragent.framework.convention;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * RAG 检索命中结果
+ * 推荐问题 grounding 片段
  * <p>
- * 表示一次向量检索或相关性搜索命中的单条记录
- * 包含原始文档片段 主键以及相关性得分
+ * 由检索片段按文档取最高分、截断文本后得到，随 assistant 消息落库，
+ * 供推荐追问问题生成时 grounding：保证追问落在系统已掌握的证据面内（可答）、与已答内容发散（不集中）
+ * <p>
+ * 与 {@link SourceRef} 职责分离：SourceRef 面向来源面板/预览（摘录 100 字），
+ * 本类面向推荐生成 grounding（片段文本更长）。两者均不参与模型回答上下文
  */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class RetrievedChunk {
+@JsonInclude(JsonInclude.Include.NON_NULL)
+public class GroundingChunk {
 
     /**
-     * 命中记录的唯一标识
-     * 比如向量库中的 primary key 或文档 id
-     */
-    private String id;
-
-    /**
-     * 命中的文本内容
-     * 一般是被切分后的文档片段或段落
-     */
-    private String text;
-
-    /**
-     * 命中得分
-     * 数值越大表示与查询的相关性越高
-     */
-    private Float score;
-
-    /**
-     * 所属文档 ID
-     * 检索后由元数据富化补齐 未富化时为 null
-     */
-    private String docId;
-
-    /**
-     * 分块在所属文档中的序号 从 0 开始
-     * 检索后由元数据富化补齐 未富化时为 null
-     */
-    private Integer chunkIndex;
-
-    /**
-     * 所属文档名称 用于组装上下文时作为文档标题的内部锚点
-     * 检索后由元数据富化补齐 未富化时为 null
+     * 文档名称 供生成追问时识别证据所属文档
      */
     private String docName;
+
+    /**
+     * 片段全文 作为追问 grounding 的证据内容
+     */
+    private String text;
 }

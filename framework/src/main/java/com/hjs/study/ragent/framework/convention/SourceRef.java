@@ -17,56 +17,56 @@
 
 package com.hjs.study.ragent.framework.convention;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * RAG 检索命中结果
+ * 回答来源引用（文档级）
  * <p>
- * 表示一次向量检索或相关性搜索命中的单条记录
- * 包含原始文档片段 主键以及相关性得分
+ * 由检索片段按文档去重、赋号后得到，同时用于：SSE 下发、消息落库、前端来源面板与预览
  */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class RetrievedChunk {
+@JsonInclude(JsonInclude.Include.NON_NULL)
+public class SourceRef {
 
     /**
-     * 命中记录的唯一标识
-     * 比如向量库中的 primary key 或文档 id
+     * 来源序号 从 1 开始 面板与将来行内角标共用同一编号
      */
-    private String id;
+    private Integer index;
 
     /**
-     * 命中的文本内容
-     * 一般是被切分后的文档片段或段落
-     */
-    private String text;
-
-    /**
-     * 命中得分
-     * 数值越大表示与查询的相关性越高
-     */
-    private Float score;
-
-    /**
-     * 所属文档 ID
-     * 检索后由元数据富化补齐 未富化时为 null
+     * 文档 ID 用于预览取原文
      */
     private String docId;
 
     /**
-     * 分块在所属文档中的序号 从 0 开始
-     * 检索后由元数据富化补齐 未富化时为 null
-     */
-    private Integer chunkIndex;
-
-    /**
-     * 所属文档名称 用于组装上下文时作为文档标题的内部锚点
-     * 检索后由元数据富化补齐 未富化时为 null
+     * 文档名称 面板标题
      */
     private String docName;
+
+    /**
+     * 来源类型 file/url/feishu
+     */
+    private String sourceType;
+
+    /**
+     * 文件类型 md/xlsx/pdf/doc/图片等 前端据此为本地文件选类型图标 网页来源可为 null
+     */
+    private String fileType;
+
+    /**
+     * 外部原始链接 url/feishu 有 file 为 null（file 走 docId 预览提取正文）
+     */
+    private String url;
+
+    /**
+     * 摘录 取该文档最相关片段的截断文本
+     */
+    private String excerpt;
 }

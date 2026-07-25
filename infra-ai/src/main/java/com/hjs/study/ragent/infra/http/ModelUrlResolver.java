@@ -1,6 +1,7 @@
 package com.hjs.study.ragent.infra.http;
 
 import com.hjs.study.ragent.infra.config.AIModelProperties;
+import com.hjs.study.ragent.infra.enums.ModelCapability;
 import lombok.NoArgsConstructor;
 
 import java.util.Map;

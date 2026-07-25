@@ -15,58 +15,54 @@
  * limitations under the License.
  */
 
-package com.hjs.study.ragent.framework.convention;
+package com.hjs.study.ragent.framework.mq;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.io.Serial;
+import java.io.Serializable;
+import java.util.UUID;
+
 /**
- * RAG 检索命中结果
+ * 统一消息外壳。
  * <p>
- * 表示一次向量检索或相关性搜索命中的单条记录
- * 包含原始文档片段 主键以及相关性得分
+ * MQ 的原始 body 只描述业务数据，缺少排障和幂等需要的公共字段。该外壳把业务 key、业务载荷、
+ * 消息唯一标识和发送时间固定下来，使生产者、消费者和事务回查使用同一份协议。
+ * </p>
  */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class RetrievedChunk {
+public class MessageWrapper<T> implements Serializable {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     /**
-     * 命中记录的唯一标识
-     * 比如向量库中的 primary key 或文档 id
+     * 业务 key。
+     * 用于按订单、文档或任务等业务实体检索消息；它不要求在全局唯一。
      */
-    private String id;
+    private String keys;
 
     /**
-     * 命中的文本内容
-     * 一般是被切分后的文档片段或段落
+     * 业务载荷
      */
-    private String text;
+    private T body;
 
     /**
-     * 命中得分
-     * 数值越大表示与查询的相关性越高
+     * 消息实例的全局唯一标识，用于客户端幂等验证。
+     * 同一业务 key 的多次合法事件可以拥有不同 uuid。
      */
-    private Float score;
+    @Builder.Default
+    private String uuid = UUID.randomUUID().toString();
 
     /**
-     * 所属文档 ID
-     * 检索后由元数据富化补齐 未富化时为 null
+     * 消息发送时间
      */
-    private String docId;
-
-    /**
-     * 分块在所属文档中的序号 从 0 开始
-     * 检索后由元数据富化补齐 未富化时为 null
-     */
-    private Integer chunkIndex;
-
-    /**
-     * 所属文档名称 用于组装上下文时作为文档标题的内部锚点
-     * 检索后由元数据富化补齐 未富化时为 null
-     */
-    private String docName;
+    @Builder.Default
+    private Long timestamp = System.currentTimeMillis();
 }
