@@ -15,47 +15,25 @@
  * limitations under the License.
  */
 
-package com.hjs.study.ragent.infra.enums;
+package com.hjs.study.ragent.infra.rerank;
 
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
+import com.hjs.study.ragent.framework.convention.RetrievedChunk;
+
+import java.util.List;
 
 /**
- * 模型提供商枚举
- * 统一管理提供商名称，避免散落的字符串常量
+ * Rerank 服务：对向量检索出来的一批候选文档进行精排，
+ * 按“和 query 的相关度”重新排序，并只返回前 topN 条
  */
-@Getter
-@RequiredArgsConstructor
-public enum ModelProvider {
+public interface RerankService {
 
     /**
-     * Ollama 本地模型服务
+     * 对向量检索出来的一批候选文档进行精排，按“和 query 的相关度”重新排序，并只返回前 topN 条
+     *
+     * @param query      用户问题
+     * @param candidates 向量检索出来的一批候选文档（通常是 topK 的 3~5 倍）
+     * @param topN       最终希望保留的条数（喂给大模型的 K）
+     * @return 经过精排后的前 topN 条文档
      */
-    OLLAMA("ollama"),
-
-    /**
-     * 阿里云百炼大模型平台
-     */
-    BAI_LIAN("bailian"),
-
-    /**
-     * 硅基流动 AI 模型服务
-     */
-    SILICON_FLOW("siliconflow"),
-
-    /**
-     * 推理时代 AI 模型服务
-     */
-    AI_HUB_MIX("aihubmix"),
-
-    /**
-     * 空实现，用于测试或占位
-     */
-    NOOP("noop");
-
-    private final String id;
-
-    public boolean matches(String provider) {
-        return provider != null && provider.equalsIgnoreCase(id);
-    }
+    List<RetrievedChunk> rerank(String query, List<RetrievedChunk> candidates, int topN);
 }

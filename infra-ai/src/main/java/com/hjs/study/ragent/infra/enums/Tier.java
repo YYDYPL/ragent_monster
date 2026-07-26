@@ -18,44 +18,39 @@
 package com.hjs.study.ragent.infra.enums;
 
 import lombok.Getter;
-import lombok.RequiredArgsConstructor;
 
 /**
- * 模型提供商枚举
- * 统一管理提供商名称，避免散落的字符串常量
+ * 模型档位枚举
+ * <p>
+ * 档位表达「质量 / 成本 / 时延预算」，非业务任务本身。默认档为 standard，
+ * 调用点想要更快/更强的模型时显式传入本枚举覆盖，路由层据此在对应档位内选候选并容错。
+ * 每个枚举值的 key 对应 application.yaml 中 ai.chat.tiers 下的档位键
  */
 @Getter
-@RequiredArgsConstructor
-public enum ModelProvider {
+public enum Tier {
 
     /**
-     * Ollama 本地模型服务
+     * 快速档：低延迟优先，用于高频或低风险任务（标题、歧义、改写、摘要、入库富化/增强）
      */
-    OLLAMA("ollama"),
+    FAST("fast"),
 
     /**
-     * 阿里云百炼大模型平台
+     * 标准档：质量与成本平衡，未显式指定档位时的默认档
      */
-    BAI_LIAN("bailian"),
+    STANDARD("standard"),
 
     /**
-     * 硅基流动 AI 模型服务
+     * 深度档：高质量、高成本，用于深度思考回答（通常由 thinking=true 触发）
      */
-    SILICON_FLOW("siliconflow"),
+    DEEP("deep");
 
     /**
-     * 推理时代 AI 模型服务
+     * -- GETTER --
+     *  对应 ai.chat.tiers 下的档位键
      */
-    AI_HUB_MIX("aihubmix"),
+    private final String key;
 
-    /**
-     * 空实现，用于测试或占位
-     */
-    NOOP("noop");
-
-    private final String id;
-
-    public boolean matches(String provider) {
-        return provider != null && provider.equalsIgnoreCase(id);
+    Tier(String key) {
+        this.key = key;
     }
 }

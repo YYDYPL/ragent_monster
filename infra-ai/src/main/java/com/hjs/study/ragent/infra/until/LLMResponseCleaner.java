@@ -15,22 +15,31 @@
  * limitations under the License.
  */
 
-package com.hjs.study.ragent.infra.http;
+package com.hjs.study.ragent.infra.until;
 
-import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
-import okhttp3.MediaType;
+
+import java.util.regex.Pattern;
 
 /**
- * HTTP 媒体类型常量类
- * 提供常用的 HTTP Content-Type 媒体类型定义
+ * LLM 输出清理工具类
  */
-@NoArgsConstructor(access = AccessLevel.PRIVATE)
-public final class HttpMediaTypes {
+@NoArgsConstructor(access = lombok.AccessLevel.PRIVATE)
+public final class LLMResponseCleaner {
+
+    private static final Pattern LEADING_CODE_FENCE = Pattern.compile("^```[\\w-]*\\s*\\n?");
+    private static final Pattern TRAILING_CODE_FENCE = Pattern.compile("\\n?```\\s*$");
 
     /**
-     * JSON 媒体类型，使用 UTF-8 字符集
-     * 用于 OkHttp 请求中的 MediaType 对象
+     * 移除 Markdown 代码块围栏（例如 ```json ... ```）
      */
-    public static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
+    public static String stripMarkdownCodeFence(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String cleaned = raw.trim();
+        cleaned = LEADING_CODE_FENCE.matcher(cleaned).replaceFirst("");
+        cleaned = TRAILING_CODE_FENCE.matcher(cleaned).replaceFirst("");
+        return cleaned.trim();
+    }
 }
