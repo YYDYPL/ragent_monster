@@ -2,6 +2,19 @@
 
 本文档演示如何使用 **nextNodeId** 创建PDF摄取流水线并上传文档。
 
+## 前置准备
+
+以下示例使用环境变量保存 API 地址和登录 Token：
+
+```bash
+API_BASE="http://localhost:9090/api/ragent"
+TOKEN=$(curl -s -X POST "${API_BASE}/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin"}' | jq -r '.data.token')
+```
+
+请确认 `TOKEN` 不为空。生产环境不要使用默认管理员密码。
+
 ## 📋 流程说明
 
 ```
@@ -22,7 +35,8 @@
 
 **请求**:
 ```bash
-curl -X POST "http://localhost:8080/api/ragent/ingestion/pipelines" \
+curl -X POST "http://localhost:9090/api/ragent/ingestion/pipelines" \
+  -H "Authorization: ${TOKEN}" \
   -H "Content-Type: application/json" \
   -d @pdf-pipeline-request.json
 ```
@@ -53,7 +67,8 @@ curl -X POST "http://localhost:8080/api/ragent/ingestion/pipelines" \
 
 **请求**:
 ```bash
-curl -X POST "http://localhost:8080/api/ragent/ingestion/tasks/upload" \
+curl -X POST "http://localhost:9090/api/ragent/ingestion/tasks/upload" \
+  -H "Authorization: ${TOKEN}" \
   -F "pipelineId=1" \
   -F "file=@/path/to/your/document.pdf" \
   -F "metadata={\"category\":\"manual\",\"department\":\"IT\"}"
@@ -82,7 +97,8 @@ curl -X POST "http://localhost:8080/api/ragent/ingestion/tasks/upload" \
 
 **请求**:
 ```bash
-curl "http://localhost:8080/api/ragent/ingestion/tasks/123"
+curl "http://localhost:9090/api/ragent/ingestion/tasks/123" \
+  -H "Authorization: ${TOKEN}"
 ```
 
 **响应（执行中）**:
@@ -204,11 +220,15 @@ No start node found in pipeline
 ```bash
 #!/bin/bash
 
-API_BASE="http://localhost:8080/api/ragent"
+API_BASE="http://localhost:9090/api/ragent"
+TOKEN=$(curl -s -X POST "${API_BASE}/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin"}' | jq -r '.data.token')
 
 # 1. 创建流水线
 echo "📝 Creating pipeline..."
 PIPELINE_RESPONSE=$(curl -s -X POST "${API_BASE}/ingestion/pipelines" \
+  -H "Authorization: ${TOKEN}" \
   -H "Content-Type: application/json" \
   -d @pdf-pipeline-request.json)
 
@@ -218,6 +238,7 @@ echo "✅ Pipeline created: ID=${PIPELINE_ID}"
 # 2. 上传PDF
 echo "📤 Uploading PDF..."
 TASK_RESPONSE=$(curl -s -X POST "${API_BASE}/ingestion/tasks/upload" \
+  -H "Authorization: ${TOKEN}" \
   -F "file=@test.pdf" \
   -F "metadata={\"test\":true}")
 
@@ -227,7 +248,8 @@ echo "✅ Task created: ID=${TASK_ID}"
 # 3. 等待完成
 echo "⏳ Waiting for completion..."
 while true; do
-  STATUS_RESPONSE=$(curl -s "${API_BASE}/ingestion/tasks/${TASK_ID}")
+  STATUS_RESPONSE=$(curl -s "${API_BASE}/ingestion/tasks/${TASK_ID}" \
+    -H "Authorization: ${TOKEN}")
   STATUS=$(echo $STATUS_RESPONSE | jq -r '.data.status')
 
   if [ "$STATUS" == "COMPLETED" ]; then
@@ -246,7 +268,8 @@ echo "📊 Task summary:"
 echo $STATUS_RESPONSE | jq '.data'
 
 echo "📋 Node details:"
-curl -s "${API_BASE}/ingestion/tasks/${TASK_ID}/nodes" | jq '.data[] | {nodeType, status, durationMs}'
+curl -s "${API_BASE}/ingestion/tasks/${TASK_ID}/nodes" \
+  -H "Authorization: ${TOKEN}" | jq '.data[] | {nodeType, status, durationMs}'
 
 echo "🎉 Test completed successfully!"
 ```
@@ -257,7 +280,8 @@ echo "🎉 Test completed successfully!"
 
 **简化版（单行）**:
 ```bash
-curl -X POST "http://localhost:8080/api/ragent/ingestion/pipelines" \
+curl -X POST "http://localhost:9090/api/ragent/ingestion/pipelines" \
+  -H "Authorization: ${TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "pdf-pipeline",
