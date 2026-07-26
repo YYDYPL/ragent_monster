@@ -64,7 +64,7 @@ public final class IdempotentSubmitAspect {
     /**
      * 增强方法标记 {@link IdempotentSubmit} 注解逻辑
      */
-    @Around("@annotation(com.nageoffer.ai.ragent.framework.idempotent.IdempotentSubmit)")
+    @Around("@annotation(com.hjs.study.ragent.framework.idempotent.IdempotentSubmit)")
     public Object idempotentSubmit(ProceedingJoinPoint joinPoint) throws Throwable {
         if (evalEnabled) {
             // 评测场景可能需要并发、重复地发同一个问题，故显式跳过用户侧防抖。

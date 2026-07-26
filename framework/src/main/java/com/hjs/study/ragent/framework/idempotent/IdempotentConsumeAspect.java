@@ -62,7 +62,7 @@ public final class IdempotentConsumeAspect {
     /**
      * 增强方法标记 {@link IdempotentConsume} 注解逻辑
      */
-    @Around("@annotation(com.nageoffer.ai.ragent.framework.idempotent.IdempotentConsume)")
+    @Around("@annotation(com.hjs.study.ragent.framework.idempotent.IdempotentConsume)")
     public Object idempotentConsume(ProceedingJoinPoint joinPoint) throws Throwable {
         IdempotentConsume idempotentConsume = getIdempotentConsumeAnnotation(joinPoint);
         String uniqueKey = idempotentConsume.keyPrefix()

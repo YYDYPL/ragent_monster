@@ -1,0 +1,62 @@
+name: ragent-local-middleware
+
+services:
+  postgres:
+    container_name: ragent-postgres
+    image: pgvector/pgvector:0.8.2-pg15-bookworm
+    environment:
+      POSTGRES_DB: ragent
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      TZ: Asia/Shanghai
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - ragent-postgres-data:/var/lib/postgresql/data
+      - ../database/schema_pg.sql:/docker-entrypoint-initdb.d/10-schema.sql:ro
+      - ../database/init_data_pg.sql:/docker-entrypoint-initdb.d/20-init-data.sql:ro
+    shm_size: 256mb
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ragent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    restart: unless-stopped
+    stop_grace_period: 30s
+
+  rustfs:
+    container_name: ragent-rustfs
+    image: rustfs/rustfs:1.0.0-alpha.72
+    command:
+      - "--address"
+      - ":9000"
+      - "--console-enable"
+      - "--access-key"
+      - "rustfsadmin"
+      - "--secret-key"
+      - "rustfsadmin"
+      - "/data"
+    environment:
+      RUSTFS_ACCESS_KEY: rustfsadmin
+      RUSTFS_SECRET_KEY: rustfsadmin
+      RUSTFS_CONSOLE_ENABLE: "true"
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - ragent-rustfs-data:/data
+    healthcheck:
+      test: ["CMD", "sh", "-c", "wget -qO- http://localhost:9000/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    restart: unless-stopped
+    stop_grace_period: 30s
+
+volumes:
+  ragent-postgres-data:
+    name: ragent-postgres-data
+  ragent-rustfs-data:
+    name: ragent-rustfs-data
