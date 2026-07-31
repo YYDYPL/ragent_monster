@@ -18,14 +18,15 @@
 package com.hjs.study.ragent.core.parser.model;
 
 /**
- * 资产引用：指向对象存储中已上传的二进制资源（图片等）
+ * 资产引用：指向对象存储中已上传的二进制资源（当前主要是图片）。
  * <p>
  * 由 MinerUResultUnpacker / Excel 等解析器在上传资产后构造，
- * 挂在 ImageBlock 上，并最终回填到 VectorChunk.assets 供检索使用
+ * 挂在 ImageBlock 上，并最终回填到 VectorChunk.assets，供来源展示和资产追踪使用。
+ * 该对象只保存引用，不持有文件字节，也不负责访问权限与 URL 续期。
  *
- * @param publicUrl     浏览器可直连的公开预览 URL，如 "<a href="http://localhost:9000/ragent-assets/xxx.png">...</a>"（资产桶已开公共读）
- * @param mime          MIME 类型，如 "image/png"
- * @param sourceBlockId 关联的 Block.id()，用于溯源
+ * @param publicUrl     浏览器可访问的预览 URL；当前资产桶配置为公共读
+ * @param mime          MIME 类型，如 image/png，供前端和下游判断资源类型
+ * @param sourceBlockId 关联的 Block.id()，用于把资产反查到产生它的内容块
  */
 public record AssetRef(String publicUrl, String mime, String sourceBlockId) {
 }

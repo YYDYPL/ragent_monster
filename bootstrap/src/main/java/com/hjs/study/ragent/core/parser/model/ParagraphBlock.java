@@ -20,9 +20,15 @@ package com.hjs.study.ragent.core.parser.model;
 import java.util.List;
 
 /**
- * 段落 Block：由 ParagraphChunker 按 token 切分，可跨段落合并到目标长度，不跨 heading
+ * 段落 Block。
+ * <p>
+ * ParagraphChunker 可按 Token 切分长段落，并在不跨标题边界的前提下合并相邻短段落。
+ * 解析器应尽量让一个 ParagraphBlock 对应原文中的一个自然段。
  *
- * @param text 段落文本（不含 markdown 标记）
+ * @param id          Block 唯一 ID
+ * @param provenance 原始文档来源
+ * @param outlinePath 所属章节路径
+ * @param text        段落文本；可能包含为兼容保留的链接或 HTML
  */
 public record ParagraphBlock(
         String id,

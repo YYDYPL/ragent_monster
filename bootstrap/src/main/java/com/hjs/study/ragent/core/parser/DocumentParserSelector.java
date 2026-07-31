@@ -25,25 +25,40 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * 文档解析器选择器（策略模式）
+ * 文档解析器选择器（策略模式）。
  * <p>
- * 负责管理和选择合适的文档解析策略。根据解析器类型或 MIME 类型，
- * 动态选择最合适的解析器实现，体现了策略模式的核心思想
- * </p>
+ * Spring 会把容器内全部 {@link DocumentParser} 实现注入构造器。选择器同时保存：
  * <p>
- * 支持两种选择方式：
  * <ul>
- *   <li>按类型选择：通过 {@link #select(String)} 指定解析器类型（如 {@link ParserType#TIKA}, {@link ParserType#MARKDOWN}）</li>
- *   <li>按 MIME 类型选择：通过 {@link #selectByMimeType(String)} 自动匹配支持该 MIME 类型的解析器</li>
+ *   <li>有序列表：用于按 MIME 顺序匹配，第一个支持者胜出；</li>
+ *   <li>类型 Map：用于调用方明确指定某个解析器。</li>
  * </ul>
- * </p>
+ * <p>
+ * 列表顺序由 Spring 的 {@code @Order}/{@code Ordered} 规则决定。专用解析器应具有更高优先级，
+ * 宽泛兜底解析器应排在最后。找不到解析器时这里返回 null，由业务入口生成包含文件信息的异常，
+ * 避免选择器丢失调用上下文。
  */
 @Component
 public class DocumentParserSelector {
 
+    /**
+     * 保留 Spring 注入顺序的策略列表，用于 MIME 的“第一个匹配”语义。
+     */
     private final List<DocumentParser> strategies;
+
+    /**
+     * parserType 到实现的快速索引，用于显式指定解析器。
+     */
     private final Map<String, DocumentParser> strategyMap;
 
+    /**
+     * 构建选择器索引。
+     * <p>
+     * 理论上 parserType 应唯一；若出现重复，合并函数保留先注入的实现。这能保证应用启动，
+     * 但重复类型通常意味着配置错误，新增解析器时应主动避免。
+     *
+     * @param parsers Spring 容器内的全部解析器，顺序已应用 {@code @Order}
+     */
     public DocumentParserSelector(List<DocumentParser> parsers) {
         this.strategies = parsers;
         this.strategyMap = parsers.stream()
@@ -55,7 +70,10 @@ public class DocumentParserSelector {
     }
 
     /**
-     * 根据解析器类型选择解析策略
+     * 根据解析器类型精确选择解析策略。
+     * <p>
+     * 该方法不会做大小写转换、别名解析或兜底，传入值必须与
+     * {@link DocumentParser#getParserType()} 完全一致。
      *
      * @param parserType 解析器类型（如 {@link ParserType#TIKA}, {@link ParserType#MARKDOWN}）
      * @return 解析器实例，如果不存在则返回 null
@@ -65,10 +83,11 @@ public class DocumentParserSelector {
     }
 
     /**
-     * 根据 MIME 类型自动选择合适的解析策略
+     * 根据 MIME 类型自动选择合适的解析策略。
      * <p>
-     * v1.1 多模态解析改造:遍历所有可用的解析器,返回第一个支持该 MIME 类型的解析器
-     * <b>不再静默兜底到 Tika</b>;无匹配时返回 null,由调用方(ParserNode)显式抛错
+     * 按 {@link #strategies} 的既定顺序调用 {@link DocumentParser#supports(String)}，
+     * 返回第一个匹配项。这里<b>不会静默兜底到 Tika</b>；无匹配时返回 null，
+     * 由调用方（如 ParserNode）显式报告“不支持的文件类型”。
      *
      * @param mimeType MIME 类型(如 "application/pdf", "text/markdown")
      * @return 支持该 MIME 类型的解析器;无匹配时返回 null
@@ -81,7 +100,9 @@ public class DocumentParserSelector {
     }
 
     /**
-     * 获取所有可用的解析策略
+     * 获取所有可用的解析策略。
+     * <p>
+     * 返回不可修改的快照视图，避免外部代码破坏选择顺序。
      *
      * @return 解析器列表
      */
@@ -90,7 +111,7 @@ public class DocumentParserSelector {
     }
 
     /**
-     * 获取所有解析器类型
+     * 获取所有解析器类型，顺序与 MIME 匹配顺序一致。
      *
      * @return 解析器类型列表
      */

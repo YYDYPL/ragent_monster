@@ -20,10 +20,16 @@ package com.hjs.study.ragent.core.parser.model;
 import java.util.List;
 
 /**
- * 代码块 Block：由 CodeChunker 产生 atomic chunk（代码切碎危害大，永不切）
+ * 代码块 Block。
+ * <p>
+ * 下游 CodeChunker 把它视为原子 Chunk，避免截断语法结构或把上下文相关的代码片段分离。
+ * 这意味着超长代码块可能突破一般目标 Chunk 长度，是完整性优先于长度预算的设计取舍。
  *
- * @param language 编程语言标识（如 "java"、"bash"），可空
- * @param code     代码内容
+ * @param id          Block 唯一 ID
+ * @param provenance 原始文档来源
+ * @param outlinePath 所属章节路径，通常由下游补充
+ * @param language    编程语言标识（如 java、bash），可空
+ * @param code        不含外层围栏的代码内容
  */
 public record CodeBlock(
         String id,

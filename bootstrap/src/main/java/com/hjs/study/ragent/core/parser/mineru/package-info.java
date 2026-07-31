@@ -15,27 +15,23 @@
  * limitations under the License.
  */
 
-package com.hjs.study.ragent.core.parser.model;
-
-import java.util.List;
-
 /**
- * 标题 Block。
- * <p>
- * ChunkerNode 中的 HeadingHandler 消费标题并更新当前章节栈；标题通常不单独产生内容 Chunk，
- * 而是成为后续段落、表格等 Chunk 的 sectionContext。
+ * MinerU SaaS 文档解析适配层。
  *
- * @param id          Block 唯一 ID
- * @param provenance 原始文档来源
- * @param outlinePath 解析器已知的上级章节路径
- * @param level       Markdown 标题级别，约定为 1-6
- * @param text        不含井号标记的标题文本
+ * <p>完整调用链是：
+ *
+ * <pre>
+ * MinerUDocumentParser
+ *   ├─ 获取 Redisson 分布式许可
+ *   ├─ MinerUClient 申请预签名上传地址
+ *   ├─ MinerUClient 上传原文件
+ *   ├─ MinerUPollingExecutor 定时查询任务
+ *   ├─ MinerUClient 下载结果 ZIP
+ *   └─ MinerUResultUnpacker 解析 Markdown、上传图片并生成 Block
+ * </pre>
+ *
+ * <p>这里同时跨越外部 HTTP、Redis 许可、定时调度、ZIP 解包和对象存储。阅读代码时应分别追踪
+ * “解析任务许可”“MinerU batchId”“业务 documentId”三个标识：它们解决的是限流、外部任务
+ * 关联和内部资产归属三个不同问题，不能互相替代。
  */
-public record HeadingBlock(
-        String id,
-        Provenance provenance,
-        List<String> outlinePath,
-        int level,
-        String text
-) implements Block {
-}
+package com.hjs.study.ragent.core.parser.mineru;

@@ -23,10 +23,10 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import java.util.List;
 
 /**
- * 结构化解析产物的统一基类（内存中间表示 IR）
+ * 结构化解析产物的统一基类（内存中间表示，IR）。
  * <p>
- * Block 是解析器输出到 ChunkerNode 之间的中间表示，仅存活于解析阶段
- * 最终入向量库的 VectorChunk.content 仍是 markdown 字符串，markdown 在 ChunkerNode 阶段渲染
+ * Block 是解析器输出到 ChunkerNode 之间的中间表示。最终进入关系库/向量库的
+ * VectorChunk.content 仍是字符串，Markdown 渲染和切分策略由 ChunkerNode 阶段决定。
  * <p>
  * 关键设计：
  * <ul>
@@ -35,6 +35,9 @@ import java.util.List;
  *   <li>id() 提供唯一标识，供 AssetRef.sourceBlockId 与资产 key 规则引用</li>
  *   <li>markdown 不在 Block 上，chunker 渲染时按需生成</li>
  * </ul>
+ * <p>
+ * Jackson 通过 {@code @type} 字段保存具体子类型，使 Block 能进入任务日志或 JSON 上下文后再
+ * 恢复。{@link JsonSubTypes} 与 permits 列表必须同步维护。
  */
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "@type")
 @JsonSubTypes({
@@ -48,18 +51,22 @@ import java.util.List;
 public sealed interface Block permits HeadingBlock, ParagraphBlock, TableBlock, ImageBlock, CodeBlock, ListBlock {
 
     /**
-     * 唯一标识，用于 AssetRef.sourceBlockId 与资产 key 规则
+     * 当前 ParsedDocument 内的 Block 唯一标识。
+     * <p>
+     * 现有解析器使用 UUID 生成；它用于资产引用和下游追踪，不等于数据库 Chunk ID。
      */
     String id();
 
     /**
-     * 来源信息：文件、页码 / sheet、bbox / 单元格范围
+     * 来源信息。当前模型保存源文件和可选 Sheet 名，未来可在不污染正文的前提下扩展页码等位置。
      */
     Provenance provenance();
 
     /**
-     * 章节层级路径，如 ["第3章", "3.2 销售分析"]
-     * 由 ChunkerNode 中的 HeadingHandler 累积注入 sectionContext
+     * 章节层级路径，如 ["第3章", "3.2 销售分析"]。
+     * <p>
+     * 多数解析器创建 Block 时传空列表；ChunkerNode 中的 HeadingHandler 会按标题序列维护
+     * sectionContext。字段仍保留在 IR 上，允许能直接识别章节的解析器预先填充。
      */
     List<String> outlinePath();
 }

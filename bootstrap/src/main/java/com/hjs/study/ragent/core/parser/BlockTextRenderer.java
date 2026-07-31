@@ -23,18 +23,23 @@ import lombok.NoArgsConstructor;
 import java.util.List;
 
 /**
- * Block 列表 → 纯文本渲染器
+ * Block 列表 → 兼容性纯文本渲染器。
  * <p>
  * 把 {@link com.hjs.study.ragent.core.parser.model.ParsedDocument} 的 Block 列表渲染为纯文本，
- * 供 PIPELINE 链路（ParserNode rawText 兼容）与 CHUNK 链路（分块输入）共用同一份实现
+ * 供 PIPELINE 链路的 rawText 兼容字段与非结构化分块路径共用同一份实现。
  * <p>
- * 简单实现：拼接各 Block 的可读文本表示。完整 markdown 渲染由 ChunkerNode 在 BlockAware 路径完成
+ * 这里追求“信息不丢失”和“便于阅读”，不是完整 Markdown 序列化器：
+ * 标题、代码、列表和图片使用最小 Markdown 形式，表格只用竖线连接，不生成对齐分隔行。
+ * Block-aware 路径仍由对应 Chunker 决定最终 Chunk 文本和 embeddingText。
+ * <p>
+ * 方法不修改传入 Block；未知或 null 元素会被忽略。由于 {@link Block} 是 sealed interface，
+ * 新增 Block 子类型后应同步更新本类，否则兼容性文本会缺失该类型内容。
  */
 @NoArgsConstructor(access = lombok.AccessLevel.PRIVATE)
 public final class BlockTextRenderer {
 
     /**
-     * 把 Block 列表渲染为纯文本
+     * 把 Block 列表按原有顺序渲染为一段文本。
      *
      * @param blocks 有序 Block 列表，为 null 时返回空串
      * @return 渲染后的纯文本
@@ -46,11 +51,13 @@ public final class BlockTextRenderer {
         StringBuilder sb = new StringBuilder();
         for (Block b : blocks) {
             if (b instanceof HeadingBlock h) {
+                // 非法或缺失层级最少按一级标题输出，避免 String.repeat 收到负数。
                 sb.append("#".repeat(Math.max(1, h.level())))
                         .append(' ').append(h.text() == null ? "" : h.text()).append("\n\n");
             } else if (b instanceof ParagraphBlock p) {
                 sb.append(p.text() == null ? "" : p.text()).append("\n\n");
             } else if (b instanceof TableBlock t) {
+                // 表格在兼容文本中保留行列边界；严格的 Markdown 表格由 TableChunker 负责。
                 if (t.headers() != null) {
                     sb.append(String.join(" | ", t.headers())).append('\n');
                 }
@@ -70,6 +77,7 @@ public final class BlockTextRenderer {
                         .append(i.caption() == null ? "" : i.caption()).append("](")
                         .append(i.asset() == null ? "" : i.asset().publicUrl()).append(")\n\n");
             } else if (b instanceof CodeBlock c) {
+                // 围栏可防止代码中的换行、列表符号被误认为普通 Markdown 结构。
                 sb.append("```").append(c.language() == null ? "" : c.language())
                         .append('\n').append(c.code() == null ? "" : c.code()).append("\n```\n\n");
             } else if (b instanceof ListBlock l) {
@@ -82,6 +90,7 @@ public final class BlockTextRenderer {
                 }
             }
         }
+        // 只移除整篇首尾空白，Block 内部文本保持原样。
         return sb.toString().trim();
     }
 }

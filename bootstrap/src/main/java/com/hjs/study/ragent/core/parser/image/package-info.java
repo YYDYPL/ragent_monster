@@ -15,27 +15,17 @@
  * limitations under the License.
  */
 
-package com.hjs.study.ragent.core.parser.model;
-
-import java.util.List;
-
 /**
- * 标题 Block。
- * <p>
- * ChunkerNode 中的 HeadingHandler 消费标题并更新当前章节栈；标题通常不单独产生内容 Chunk，
- * 而是成为后续段落、表格等 Chunk 的 sectionContext。
+ * 独立图片文件的多模态解析实现。
  *
- * @param id          Block 唯一 ID
- * @param provenance 原始文档来源
- * @param outlinePath 解析器已知的上级章节路径
- * @param level       Markdown 标题级别，约定为 1-6
- * @param text        不含井号标记的标题文本
+ * <p>图片本身不能直接形成有意义的文本向量，因此这里同时产生两类数据：
+ *
+ * <ul>
+ *   <li>VLM 描述：作为可检索、可喂给 LLM 的语义文本；</li>
+ *   <li>对象存储 URL：作为最终回答中的图片展示资产。</li>
+ * </ul>
+ *
+ * <p>两者被封装在同一个 ImageBlock 中。当前实现采用失败即终止策略：如果 VLM 没有生成描述，
+ * 不会只保存图片链接，因为这种 Chunk 几乎无法通过文本检索召回。
  */
-public record HeadingBlock(
-        String id,
-        Provenance provenance,
-        List<String> outlinePath,
-        int level,
-        String text
-) implements Block {
-}
+package com.hjs.study.ragent.core.parser.image;

@@ -20,14 +20,20 @@ package com.hjs.study.ragent.core.parser.model;
 import java.util.List;
 
 /**
- * 表格 Block：由 TableChunker 按 rowsPerChunk 切分，每个 chunk 都包含 headers。
+ * 表格 Block。
+ * <p>
+ * TableChunker 按 rowsPerChunk 切分数据行，并把 headers 复制到每个 Chunk，使任一召回片段都能
+ * 独立解释列含义。解析器应保证 rows 中单元格的索引与 headers 对齐；模型本身不做运行时校验。
  * <p>
  * 合并单元格已在 Excel 解析器（ExcelTableNormalizer）展开填充；
  * 多行表头已展平为单行，列名以分隔符拼接（如 "财务|收入"）
  *
- * @param headers     列名列表（已展平）
- * @param rows        数据行（合并单元格已展开）
- * @param captionText 表格标题（若有）
+ * @param id          Block 唯一 ID
+ * @param provenance 原始文档来源
+ * @param outlinePath 所属章节路径
+ * @param headers     列名列表，Excel 多行表头在进入模型前已展平
+ * @param rows        数据行；Excel 合并单元格已展开，CSV 短行已补空
+ * @param captionText 表格标题，可为 null
  */
 public record TableBlock(
         String id,

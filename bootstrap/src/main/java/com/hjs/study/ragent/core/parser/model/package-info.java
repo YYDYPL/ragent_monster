@@ -15,27 +15,15 @@
  * limitations under the License.
  */
 
-package com.hjs.study.ragent.core.parser.model;
-
-import java.util.List;
-
 /**
- * 标题 Block。
- * <p>
- * ChunkerNode 中的 HeadingHandler 消费标题并更新当前章节栈；标题通常不单独产生内容 Chunk，
- * 而是成为后续段落、表格等 Chunk 的 sectionContext。
+ * 解析阶段的强类型中间表示（Intermediate Representation，IR）。
  *
- * @param id          Block 唯一 ID
- * @param provenance 原始文档来源
- * @param outlinePath 解析器已知的上级章节路径
- * @param level       Markdown 标题级别，约定为 1-6
- * @param text        不含井号标记的标题文本
+ * <p>{@link com.hjs.study.ragent.core.parser.model.ParsedDocument} 是文档级容器，
+ * {@link com.hjs.study.ragent.core.parser.model.Block} 是内容级密封接口。Block 的排列顺序就是
+ * 原文阅读顺序，下游分块器依赖这个顺序恢复章节上下文，因此解析器不应随意排序。
+ *
+ * <p>这些类型采用 record，主要表达不可变数据契约；不过 record 只保证字段引用不可重新赋值，
+ * 并不会自动复制传入的 {@link java.util.List} 或 {@link java.util.Map}。调用方若把可变集合传入
+ * record，仍应避免在交付下游后继续修改。
  */
-public record HeadingBlock(
-        String id,
-        Provenance provenance,
-        List<String> outlinePath,
-        int level,
-        String text
-) implements Block {
-}
+package com.hjs.study.ragent.core.parser.model;

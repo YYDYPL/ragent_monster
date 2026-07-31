@@ -21,7 +21,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.*;
 
 /**
- * Excel cell 值格式化工具
+ * Excel Cell 值格式化工具。
  * <p>
  * 处理优先级：
  * <ol>
@@ -29,6 +29,9 @@ import org.apache.poi.ss.usermodel.*;
  *   <li>公式 cell：用 evaluator 求值 → 失败回退到缓存值 → 再失败回退到原始公式字符串</li>
  *   <li>其他 cell：DataFormatter 直接格式化（覆盖数值、日期、布尔）</li>
  * </ol>
+ * <p>
+ * 这里使用“用户在 Excel 中看到的显示文本”，而不是统一转成底层数值。这样日期、百分比、
+ * 货币和自定义格式更适合进入知识库，但也意味着同一个数值可能因工作簿格式不同而产生不同文本。
  */
 @Slf4j
 public final class ExcelValueFormatter {
@@ -42,7 +45,7 @@ public final class ExcelValueFormatter {
      * @param cell      cell 实例，可空（返回空字符串）
      * @param formatter DataFormatter 实例（线程不安全，调用方持有）
      * @param evaluator 公式求值器，可空（无 evaluator 时公式 cell 走缓存值或公式字符串）
-     * @return 格式化后的字符串（已 trim）
+     * @return 格式化后的字符串（已 trim）；公式错误或无法读取时可能为空
      */
     public static String format(Cell cell, DataFormatter formatter, FormulaEvaluator evaluator) {
         if (cell == null) {
@@ -56,6 +59,12 @@ public final class ExcelValueFormatter {
         return formatter.formatCellValue(cell).trim();
     }
 
+    /**
+     * 按“实时求值 → 工作簿缓存 → 原始公式”三级策略读取公式 Cell。
+     * <p>
+     * 实时求值可能因外部链接、自定义函数或损坏公式失败；缓存值则可能是上次保存工作簿时的旧值，
+     * 所以两者分别代表“尽量最新”和“尽量可用”的取舍。
+     */
     private static String formatFormulaCell(Cell cell, DataFormatter formatter, FormulaEvaluator evaluator) {
         // 第 1 选择：通过 evaluator 求值
         if (evaluator != null) {
@@ -90,12 +99,13 @@ public final class ExcelValueFormatter {
     }
 
     /**
-     * 判断 cell 是否被划删除线（字体级 strikeout）
+     * 判断 Cell 是否被划删除线（字体级 strikeout）。
      * <p>
      * 业务里"删除线 = 软删除"约定，整行划线即整行 cell 字体 strikeout；按 cell 字体判定，
      * XSSF / HSSF 通用。富文本局部划线（同 cell 内仅部分文字划线）不在此判定范围，按需再扩展
      *
-     * @return cell 字体带 strikeout 返回 true；空 cell / 无样式 / 异常一律 false
+     * @param cell 待检查单元格
+     * @return Cell 字体带 strikeout 返回 true；空 Cell、无样式或异常一律 false
      */
     public static boolean isStrikethrough(Cell cell) {
         if (cell == null) {
@@ -110,10 +120,14 @@ public final class ExcelValueFormatter {
             Font font = workbook.getFontAt(style.getFontIndex());
             return font != null && font.getStrikeout();
         } catch (Exception e) {
+            // 删除线只是增强语义，样式读取异常不应让整份 Excel 解析失败。
             return false;
         }
     }
 
+    /**
+     * 生成便于日志定位的 {@code Sheet!A1} 地址。
+     */
     private static String describe(Cell cell) {
         return cell.getSheet().getSheetName()
                 + "!" + cell.getAddress().formatAsString();

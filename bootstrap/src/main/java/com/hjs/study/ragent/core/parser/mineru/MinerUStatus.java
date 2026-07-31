@@ -18,11 +18,14 @@
 package com.hjs.study.ragent.core.parser.mineru;
 
 /**
- * MinerU 任务状态快照
+ * MinerU 任务状态快照。
+ * <p>
+ * 这是一次轮询响应的不可变视图，不表示本地状态机会持久化。字段是否为空由 state 决定，
+ * 调用方应先判断 {@link #completed()} 或 {@link #failed()}，再读取对应载荷。
  *
  * @param state        当前状态
- * @param zipUrl       结果 zip 下载 URL,仅 {@link MinerUTaskState#DONE} 时非空
- * @param errorMessage 失败原因,仅 {@link MinerUTaskState#FAILED} 时非空
+ * @param zipUrl       结果 ZIP 下载 URL，仅 {@link MinerUTaskState#DONE} 时非空
+ * @param errorMessage 失败原因，仅 {@link MinerUTaskState#FAILED} 时非空
  */
 public record MinerUStatus(
         MinerUTaskState state,
@@ -30,10 +33,16 @@ public record MinerUStatus(
         String errorMessage
 ) {
 
+    /**
+     * @return 只有 DONE 才为 true；UNKNOWN 不会被误判为完成
+     */
     public boolean completed() {
         return state == MinerUTaskState.DONE;
     }
 
+    /**
+     * @return 只有 FAILED 才为 true；网络异常由调用方异常路径处理
+     */
     public boolean failed() {
         return state == MinerUTaskState.FAILED;
     }

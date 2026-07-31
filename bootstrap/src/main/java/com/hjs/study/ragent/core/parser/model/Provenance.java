@@ -18,24 +18,25 @@
 package com.hjs.study.ragent.core.parser.model;
 
 /**
- * Block 来源信息(溯源用)
+ * Block 来源信息（溯源用）。
  * <p>
- * 用于检索时拼接 sectionContext、排障时定位原始文档位置
+ * 用于检索结果展示和排障时定位原始文档。当前是最小模型，只保存文件与 Excel Sheet；
+ * PDF 页码、坐标框、单元格范围等更细粒度信息尚未进入该 record。
  *
- * @param sourceFile 原始文件标识(文件 ID 或文件名)
- * @param sheetName  Excel sheet 名,非 Excel 来源为 null
+ * @param sourceFile 原始文件标识（文件 ID 或文件名）；缺失时部分解析器使用空串
+ * @param sheetName  Excel Sheet 名，非 Excel 来源为 null
  */
 public record Provenance(String sourceFile, String sheetName) {
 
     /**
-     * 仅含文件来源的最小构造
+     * 创建仅含文件来源的最小 Provenance。
      */
     public static Provenance ofFile(String sourceFile) {
         return new Provenance(sourceFile, null);
     }
 
     /**
-     * Excel 来源构造
+     * 创建带 Sheet 名的 Excel Provenance。
      */
     public static Provenance ofExcelCell(String sourceFile, String sheetName) {
         return new Provenance(sourceFile, sheetName);

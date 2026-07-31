@@ -38,9 +38,9 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Excel 文档解析器（Apache POI）
+ * Excel 文档解析器（Apache POI）。
  * <p>
- * <b>M3 完整版</b>：使用 {@link ExcelTableNormalizer} 处理：
+ * 该类负责工作簿级编排，单元格细节交给 {@link ExcelTableNormalizer}：
  * <ul>
  *   <li>合并单元格展开填充</li>
  *   <li>多行表头展平拼接</li>
@@ -53,15 +53,32 @@ import java.util.UUID;
  *   <li>{@code sourceFile}: 文件标识，写入 Provenance.sourceFile</li>
  *   <li>{@code headerRows}: 表头占用的行数，默认 1（用于多行表头展平）</li>
  * </ul>
+ * <p>
+ * 每个可见 Sheet 最多生成一个 TableBlock，隐藏与 very-hidden Sheet 被跳过。工作簿、输入流都在
+ * try-with-resources 中关闭；POI 的 DataFormatter 和 FormulaEvaluator 只在单次解析内使用，
+ * 不作为共享字段，从而避免线程安全问题。
+ * <p>
+ * 该解析器的目标是结构规整的 Excel。虽然 {@link #supports(String)} 接受常见 Excel MIME，
+ * 复杂版面仍可由业务层通过 parserType 显式选择 MinerU。
  */
 @Slf4j
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE + 10)
 public class ExcelDocumentParser implements DocumentParser {
 
+    /**
+     * options：原始文件标识，最终写入 Provenance。
+     */
     public static final String OPT_SOURCE_FILE = "sourceFile";
+
+    /**
+     * options：参与展平的表头行数。
+     */
     public static final String OPT_HEADER_ROWS = "headerRows";
 
+    /**
+     * 未配置时把第一行视为表头。
+     */
     private static final int DEFAULT_HEADER_ROWS = 1;
 
     @Override
@@ -74,6 +91,7 @@ public class ExcelDocumentParser implements DocumentParser {
         if (mimeType == null) {
             return false;
         }
+        // 同时接受 Office 标准 MIME 和 Tika 可能探测出的泛化 Office MIME。
         return mimeType.equals("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                 || mimeType.equals("application/vnd.ms-excel")
                 || mimeType.equals("application/x-tika-msoffice")
@@ -86,6 +104,7 @@ public class ExcelDocumentParser implements DocumentParser {
             return ParsedDocument.of(List.of());
         }
 
+        // options 只在入口读取一次，随后以强类型局部变量传给规范化逻辑。
         String sourceFile = extractString(options);
         int headerRows = extractInt(options);
 
@@ -95,6 +114,7 @@ public class ExcelDocumentParser implements DocumentParser {
         try (ByteArrayInputStream is = new ByteArrayInputStream(content);
              Workbook workbook = WorkbookFactory.create(is)) {
 
+            // 两个 POI 辅助对象都与当前 Workbook 绑定，不跨请求缓存。
             DataFormatter formatter = new DataFormatter();
             FormulaEvaluator evaluator = workbook.getCreationHelper().createFormulaEvaluator();
 
@@ -123,7 +143,17 @@ public class ExcelDocumentParser implements DocumentParser {
     }
 
     /**
-     * 用 {@link ExcelTableNormalizer} 规范化 sheet 为单张表，产出 0 或 1 个 TableBlock
+     * 用 {@link ExcelTableNormalizer} 规范化一个 Sheet，产出 0 或 1 个 TableBlock。
+     * <p>
+     * Sheet 名写入 Provenance，而不是在解析阶段直接拼进表格正文；下游 TableChunker 可据此
+     * 构造统一的 sectionContext，并明确决定展示文本与 embeddingText 各自包含哪些来源信息。
+     *
+     * @param sheet      当前可见 Sheet
+     * @param sourceFile 原始文件标识
+     * @param headerRows 表头行数
+     * @param formatter  当前工作簿的显示值格式化器
+     * @param evaluator  当前工作簿的公式求值器
+     * @return 空 Sheet 返回空列表，否则返回只含一个表格的列表
      */
     private List<TableBlock> buildTableBlocks(Sheet sheet, String sourceFile, int headerRows,
                                               DataFormatter formatter, FormulaEvaluator evaluator) {
@@ -145,6 +175,9 @@ public class ExcelDocumentParser implements DocumentParser {
         return List.of(block);
     }
 
+    /**
+     * 读取 sourceFile；缺失时返回空串，避免来源对象出现 null。
+     */
     private static String extractString(Map<String, Object> options) {
         if (options == null) {
             return "";
@@ -153,6 +186,12 @@ public class ExcelDocumentParser implements DocumentParser {
         return v == null ? "" : v.toString();
     }
 
+    /**
+     * 宽松读取 headerRows：支持 Number 和数字字符串。
+     * <p>
+     * 非数字回退默认值；可解析但小于 1 的值不会在这里修正，而是由
+     * {@link ExcelTableNormalizer#normalize} 统一拒绝，避免悄悄改变调用方配置。
+     */
     private static int extractInt(Map<String, Object> options) {
         if (options == null) {
             return ExcelDocumentParser.DEFAULT_HEADER_ROWS;

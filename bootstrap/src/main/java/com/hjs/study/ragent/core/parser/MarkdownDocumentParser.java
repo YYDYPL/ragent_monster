@@ -32,9 +32,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 /**
- * Markdown 文档解析器
+ * Markdown 文档解析器。
  * <p>
- * v1.1 升级（M6 / P1.9）：用 commonmark-java 解析 AST,输出真正结构化的 Block 列表
+ * 使用 commonmark-java 把 UTF-8 文本解析为 AST，再把顶层块节点转换为项目自己的 Block IR：
  * <ul>
  *   <li>{@code # 标题} → {@link com.hjs.study.ragent.core.parser.model.HeadingBlock}</li>
  *   <li>普通段落 → {@link ParagraphBlock}</li>
@@ -42,13 +42,21 @@ import java.util.*;
  *   <li>{@code - / 1.} 列表 → {@link ListBlock}</li>
  *   <li>GFM 表格 → 自定义 TableBlock</li>
  * </ul>
+ * <p>
+ * inline 语法会做有意简化：普通链接保留 Markdown 目标，强调标记只保留文字；图片没有资产
+ * 上传上下文，因此只会通过递归留下 alt 文本，不生成 ImageBlock。需要图片资产的复杂文档由
+ * MinerU 或独立图片解析器处理。
+ * <p>
+ * 该解析器也声明支持 {@code text/plain}，且优先级高于 Tika，因此纯文本会被当作“只有段落
+ * 语法的 Markdown”处理。
  */
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE + 20)
 public class MarkdownDocumentParser implements DocumentParser {
 
     /**
-     * 解析器（线程安全,共享）
+     * CommonMark Parser 构建成本较高且解析过程不保存文档状态，因此作为静态实例复用。
+     * GFM Tables 扩展使管道表格进入 CustomBlock 分支。
      */
     private static final Parser PARSER = Parser.builder()
             .extensions(List.of(TablesExtension.create()))
@@ -65,9 +73,11 @@ public class MarkdownDocumentParser implements DocumentParser {
             return ParsedDocument.of(List.of());
         }
 
+        // Markdown 契约固定按 UTF-8 解码，不进行字符集自动探测。
         String text = new String(content, StandardCharsets.UTF_8);
         Provenance prov = Provenance.ofFile(extractSourceFile(options));
 
+        // Visitor 只产生项目 IR，不在这里执行分块或 Markdown 再渲染。
         Document doc = (Document) PARSER.parse(text);
         BlockExtractingVisitor visitor = new BlockExtractingVisitor(prov);
         doc.accept(visitor);
@@ -88,6 +98,9 @@ public class MarkdownDocumentParser implements DocumentParser {
         );
     }
 
+    /**
+     * 从 options 读取源文件标识，供所有 Block 共享同一 Provenance。
+     */
     private static String extractSourceFile(Map<String, Object> options) {
         if (options == null) {
             return "";
@@ -99,14 +112,20 @@ public class MarkdownDocumentParser implements DocumentParser {
     // ===================== AST Visitor =====================
 
     /**
-     * AST 访问器:把 commonmark 节点转换为 ragent Block 列表
-     * 只处理顶层 block 元素;不递归进入嵌套(如列表项内的代码块仍属于 ListBlock)
+     * AST 访问器：把 CommonMark 节点转换为 Ragent Block 列表。
+     * <p>
+     * 标题、段落、代码和列表的 visit 方法有意不调用 {@code super.visit(...)}，表示当前节点
+     * 已被整体消费，避免其子节点再次生成重复 Block。列表项内部的段落被聚合进 ListBlock，
+     * 不单独生成 ParagraphBlock。
      */
     private static final class BlockExtractingVisitor extends AbstractVisitor {
 
         private final Provenance provenance;
         private final List<Block> blocks = new ArrayList<>();
 
+        /**
+         * @param provenance 本文档所有 Block 共享的来源信息
+         */
         BlockExtractingVisitor(Provenance provenance) {
             this.provenance = provenance;
         }
@@ -117,6 +136,7 @@ public class MarkdownDocumentParser implements DocumentParser {
 
         @Override
         public void visit(Heading heading) {
+            // outlinePath 此时为空；章节路径由下游 HeadingHandler 按 Block 顺序累积。
             blocks.add(new HeadingBlock(
                     UUID.randomUUID().toString(),
                     provenance,
@@ -129,7 +149,7 @@ public class MarkdownDocumentParser implements DocumentParser {
 
         @Override
         public void visit(Paragraph paragraph) {
-            // 段落可能是顶层段落,也可能是列表项内的;只处理顶层
+            // 段落可能是顶层段落，也可能是列表项内的；后者由 buildListBlock 统一消费。
             if (paragraph.getParent() instanceof ListItem) {
                 return;
             }
@@ -180,7 +200,7 @@ public class MarkdownDocumentParser implements DocumentParser {
 
         @Override
         public void visit(org.commonmark.node.CustomBlock customBlock) {
-            // GFM TableBlock 是 CustomBlock 子类
+            // GFM TableBlock 是 CustomBlock 子类；其他扩展节点继续交给默认 Visitor 遍历。
             if (customBlock instanceof TableBlock tableBlock) {
                 handleTable(tableBlock);
                 return;
@@ -188,6 +208,11 @@ public class MarkdownDocumentParser implements DocumentParser {
             super.visit(customBlock);
         }
 
+        /**
+         * 把一个列表节点整体折叠为 ListBlock。
+         * <p>
+         * 每个直接 ListItem 对应一个字符串；嵌套结构通过 inline 文本递归拍平，不保留子列表层级。
+         */
         private ListBlock buildListBlock(Node listNode, boolean ordered) {
             List<String> items = new ArrayList<>();
             Node child = listNode.getFirstChild();
@@ -206,6 +231,11 @@ public class MarkdownDocumentParser implements DocumentParser {
             );
         }
 
+        /**
+         * 把 GFM 表头和表体分别提取为 headers/rows。
+         * <p>
+         * 对齐方式等展示属性不进入 IR；下游只关心单元格文本和二维位置。
+         */
         private void handleTable(TableBlock tableBlock) {
             List<String> headers = new ArrayList<>();
             List<List<String>> rows = new ArrayList<>();
@@ -239,6 +269,9 @@ public class MarkdownDocumentParser implements DocumentParser {
             ));
         }
 
+        /**
+         * 按原顺序提取一行内的所有 TableCell 文本。
+         */
         private List<String> extractCellTexts(TableRow row) {
             List<String> cells = new ArrayList<>();
             Node cell = row.getFirstChild();
@@ -253,8 +286,10 @@ public class MarkdownDocumentParser implements DocumentParser {
     }
 
     /**
-     * 提取节点内所有 inline 文本(连接 Text / Code / Link / Emphasis 等)，
-     * 保留 Link 为 {@code [text](url)} 形式以便下游 ImageChunker 风格一致
+     * 提取节点内所有 inline 文本（Text、Code、Link、Emphasis 等）。
+     * <p>
+     * 链接保留为 {@code [text](url)}；强调只保留内部文本；软/硬换行统一为 LF。其他拥有子节点的
+     * inline 类型递归展开。当前没有 Image 专用分支，因此 Markdown 图片会退化为其 alt 文本。
      */
     private static String extractInlineText(Node parent) {
         StringBuilder sb = new StringBuilder();
@@ -266,6 +301,9 @@ public class MarkdownDocumentParser implements DocumentParser {
         return sb.toString();
     }
 
+    /**
+     * 深度优先追加单个 inline 节点；方法通过类型模式匹配决定保留哪些 Markdown 语义。
+     */
     private static void appendInline(StringBuilder sb, Node node) {
         if (node instanceof Text t) {
             sb.append(t.getLiteral());
@@ -289,6 +327,9 @@ public class MarkdownDocumentParser implements DocumentParser {
         }
     }
 
+    /**
+     * CommonMark 代码块 literal 通常自带一个结束 LF；只剥离一个，保留代码内部空行。
+     */
     private static String stripTrailingNewline(String s) {
         if (s == null) {
             return "";

@@ -18,10 +18,12 @@
 package com.hjs.study.ragent.core.parser.mineru;
 
 /**
- * MinerU 申请上传链接的请求体(精简版,单文件)
+ * MinerU 申请上传链接的内部请求模型（精简版、单文件）。
  * <p>
  * 走 MinerU 官方"本地文件批量上传解析":只提交文件元信息,不带 url
- * 真实请求 JSON 由 {@link MinerUClient#requestUpload} 内部构造,字段名按 MinerU 官方:
+ * 该 record 不直接参与 Jackson 序列化。真实请求 JSON 由
+ * {@link MinerUClient#requestUpload(BatchSubmitRequest)} 显式构造，以隔离第三方字段命名和响应
+ * 版本变化。虽然 MinerU 接口名为 batch，本项目当前一次只提交一个文件。
  * <pre>
  * {
  *   "enable_formula": true,
@@ -37,12 +39,12 @@ package com.hjs.study.ragent.core.parser.mineru;
  * }
  * </pre>
  *
- * @param fileName      文件名,必须带正确扩展名,MinerU 靠它识别格式
- * @param dataId        调用方业务标识,从 {@link MinerUStatus} 回看
+ * @param fileName      文件名，必须带正确扩展名，MinerU 依赖它识别格式
+ * @param dataId        调用方业务标识，用于在外部结果中关联内部 documentId
  * @param isOcr         是否强制 OCR
  * @param enableTable   是否提取表格
  * @param enableFormula 是否提取公式
- * @param language      语言代码,遵循 MinerU(PaddleOCR)规范,如 ch / en / chinese_cht
+ * @param language      语言代码，遵循 MinerU（PaddleOCR）规范，如 ch、en、chinese_cht
  */
 public record BatchSubmitRequest(
         String fileName,

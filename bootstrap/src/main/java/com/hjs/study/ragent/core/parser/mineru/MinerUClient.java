@@ -30,7 +30,7 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 
 /**
- * MinerU SaaS HTTP 客户端
+ * MinerU SaaS HTTP 客户端。
  * <p>
  * 提供四个核心方法(走"本地文件批量上传解析"链路):
  * <ul>
@@ -40,19 +40,37 @@ import java.io.IOException;
  *   <li>{@link #downloadZip} 下载结果 zip 字节流</li>
  * </ul>
  * <p>
- * 鉴权:HTTP header {@code Authorization: Bearer <api-key>}(上传/下载用预签名 URL,无须鉴权头)
- * 响应解析:用 {@link JsonNode} 兼容 MinerU 字段细节变化,只读关心的字段
+ * 鉴权：业务 API 使用 {@code Authorization: Bearer <api-key>}；上传和下载使用预签名 URL，
+ * 不附加业务 Token。响应使用 {@link JsonNode} 做容错读取，只依赖当前流程需要的字段，避免为
+ * 第三方完整响应建立脆弱 DTO。
+ * <p>
+ * 客户端执行同步 HTTP 调用，连接、读取和整体超时由注入的 {@code syncHttpClient} 统一配置。
+ * 本类不做业务重试：轮询阶段的瞬时异常由 MinerUPollingExecutor 吸收，提交和上传失败则直接
+ * 交给上层任务重试。
  */
 @Slf4j
 @Component
 public class MinerUClient {
 
+    /**
+     * 申请上传接口的 JSON 媒体类型；OkHttp RequestBody 会据此写 Content-Type。
+     */
     private static final MediaType JSON_MEDIA = MediaType.parse("application/json; charset=utf-8");
 
+    /** 复用连接池的同步 OkHttp 客户端。 */
     private final OkHttpClient httpClient;
+
+    /** 只用于构造请求树和解析响应树，无业务状态。 */
     private final ObjectMapper objectMapper;
+
+    /** API 地址、凭据和轮询参数。 */
     private final MinerUProperties properties;
 
+    /**
+     * @param httpClient 由主应用配置的同步 HTTP Client
+     * @param objectMapper 应用共享 JSON 映射器
+     * @param properties MinerU 配置
+     */
     public MinerUClient(@Qualifier("syncHttpClient") OkHttpClient httpClient,
                         ObjectMapper objectMapper,
                         MinerUProperties properties) {
@@ -74,6 +92,7 @@ public class MinerUClient {
     public BatchUploadTicket requestUpload(BatchSubmitRequest request) {
         requireApiKey();
 
+        // 外层字段属于 batch 级配置；files 数组当前只放一个文件。
         ObjectNode body = objectMapper.createObjectNode();
         body.put("enable_formula", request.enableFormula());
         body.put("enable_table", request.enableTable());
@@ -95,6 +114,7 @@ public class MinerUClient {
         JsonNode root = executeAndParse(httpRequest, "requestUpload");
         ensureSuccess(root, "requestUpload");
 
+        // JsonNode.path 在字段不存在时返回 MissingNode，后续 asText(null) 可统一处理缺字段。
         JsonNode data = root.path("data");
         String batchId = data.path("batch_id").asText(null);
         if (batchId == null || batchId.isBlank()) {
@@ -119,6 +139,9 @@ public class MinerUClient {
      * <p>
      * 注意:目标是 OSS 预签名 PUT 链接,按 MinerU 官方要求<b>不设 Content-Type、不带 Authorization</b>
      * 上传成功后 MinerU 自动探测并提交解析任务,随后即可 {@link #queryResult} 轮询
+     * <p>
+     * 当前成功日志会输出完整 uploadUrl；由于预签名 URL 具有临时凭据性质，生产日志策略应对其
+     * 脱敏或避免采集。
      *
      * @param uploadUrl {@link #requestUpload} 返回的上传 URL
      * @param content   文件原始字节
@@ -148,7 +171,13 @@ public class MinerUClient {
     }
 
     /**
-     * 查询任务状态
+     * 查询任务状态并归一化为 {@link MinerUStatus}。
+     * <p>
+     * batch API 即使业务码成功，也可能尚未产生 extract_result；这种情况不是错误，而是 RUNNING。
+     * 当前提交模型为单文件，因此数组非空时只读取第一个元素。
+     *
+     * @param batchId 申请上传时返回的批次 ID
+     * @return 当前状态快照
      */
     public MinerUStatus queryResult(String batchId) {
         requireApiKey();
@@ -170,7 +199,7 @@ public class MinerUClient {
             return new MinerUStatus(MinerUTaskState.RUNNING, null, null);
         }
 
-        // 单文件提交,只取第一个
+        // 单文件提交，只取第一个；未来升级真正 batch 时需改成按 data_id 关联。
         JsonNode item = extractResult.get(0);
         String stateRaw = item.path("state").asText(null);
         MinerUTaskState state = MinerUTaskState.parse(stateRaw);
@@ -181,9 +210,13 @@ public class MinerUClient {
     }
 
     /**
-     * 下载结果 zip 字节流
+     * 下载结果 ZIP 字节流。
      * <p>
-     * 注意:此 URL 通常是一次性预签名 URL,有时效;拿到 MinerUStatus.zipUrl 后立即下载
+     * 此 URL 通常是有时效的预签名 URL，拿到 MinerUStatus.zipUrl 后应立即下载。响应一次性读入
+     * byte[]，因此文件规模仍受 HTTP Client 和应用内存限制。
+     *
+     * @param zipUrl DONE 状态返回的结果地址
+     * @return 完整 ZIP 字节
      */
     public byte[] downloadZip(String zipUrl) {
         if (zipUrl == null || zipUrl.isBlank()) {
@@ -207,12 +240,18 @@ public class MinerUClient {
 
     // ============== private helpers ==============
 
+    /**
+     * 在发起需要业务鉴权的请求前快速校验配置，避免发送无意义的 Bearer null。
+     */
     private void requireApiKey() {
         if (properties.getApiKey() == null || properties.getApiKey().isBlank()) {
             throw new ServiceException("MinerU api-key 未配置,请设置环境变量 MINERU_API_KEY");
         }
     }
 
+    /**
+     * 构造带 Bearer Token 的 JSON POST 请求。
+     */
     private Request newJsonPost(String url, String jsonBody) {
         return new Request.Builder()
                 .url(url)
@@ -222,6 +261,9 @@ public class MinerUClient {
                 .build();
     }
 
+    /**
+     * 构造带 Bearer Token 的 GET 请求。
+     */
     private Request newGet(String url) {
         return new Request.Builder()
                 .url(url)
@@ -230,6 +272,15 @@ public class MinerUClient {
                 .build();
     }
 
+    /**
+     * 执行 HTTP 请求并把成功响应解析为 JSON 树。
+     * <p>
+     * HTTP 非 2xx 与 JSON 解析失败在此统一转换为 ServiceException；MinerU 业务 code 是否成功
+     * 由调用方随后使用 {@link #ensureSuccess(JsonNode, String)} 检查。响应体只读取一次。
+     *
+     * @param request 已构造的 OkHttp 请求
+     * @param opName  用于异常定位的操作名，不发送给远端
+     */
     private JsonNode executeAndParse(Request request, String opName) {
         try (Response response = httpClient.newCall(request).execute()) {
             String body = readBodySafe(response);
@@ -248,7 +299,7 @@ public class MinerUClient {
     }
 
     /**
-     * 检查 MinerU 业务码,非 0 抛错
+     * 检查 MinerU 业务码，非 0 抛出业务异常。
      * <p>
      * MinerU 标准响应格式 {@code {"code":0,"msg":"ok","data":{...}}}
      */
@@ -261,6 +312,12 @@ public class MinerUClient {
         }
     }
 
+    /**
+     * 尽力读取响应体供诊断。
+     * <p>
+     * 读取失败时返回空串，不让“记录远端错误正文失败”覆盖原始 HTTP 状态。调用后响应体已消费，
+     * 因此同一个 Response 不应再次读取。
+     */
     private String readBodySafe(Response response) {
         try {
             ResponseBody body = response.body();

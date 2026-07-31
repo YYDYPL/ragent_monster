@@ -39,7 +39,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 /**
- * MinerU 文档解析器(PDF / Word / PPT / Excel)
+ * MinerU 文档解析器（PDF / Word / PPT，亦可显式用于 Excel）。
  * <p>
  * 走 MinerU 官方"本地文件批量上传解析"，串联各组件实现 B-lite 异步解析:
  * <ol>
@@ -51,8 +51,11 @@ import java.util.concurrent.TimeoutException;
  *   <li>{@link MinerUResultUnpacker#unpack} 解包为 Block 列表(图片自动上传 RustFS)</li>
  * </ol>
  * <p>
- * 本地上传链路不依赖任何公网可达的源文件 URL，适配内网/本地部署
- * 配置项见 {@link MinerUProperties}
+ * 本地上传链路不依赖业务对象存储提供公网 URL，适配内网/本地部署；但应用实例本身仍需要访问
+ * MinerU API、预签名上传地址和结果下载地址。配置项见 {@link MinerUProperties}。
+ * <p>
+ * 解析器是同步接口：直到外部解析、下载和解包全部完成才返回 ParsedDocument。分布式许可覆盖
+ * 整个生命周期，确保多实例合计 outstanding 数不超过配置上限。
  */
 @Slf4j
 @Component
@@ -60,22 +63,22 @@ import java.util.concurrent.TimeoutException;
 public class MinerUDocumentParser implements DocumentParser {
 
     /**
-     * options 字段:文件名,写入 Provenance.sourceFile
+     * options 字段：原始文件名，写入 Provenance.sourceFile，并优先作为 MinerU 上传文件名。
      */
     public static final String OPT_SOURCE_FILE = "sourceFile";
 
     /**
-     * options 字段:文档 ID,用于资产 key 命名;不传时自动生成 UUID
+     * options 字段：文档 ID，用于资产 key 命名；不传时自动生成 UUID。
      */
     public static final String OPT_DOCUMENT_ID = "documentId";
 
     /**
-     * ParsedDocument.metadata 字段:MinerU 分配的 batchId(排障 + B 升级用)
+     * ParsedDocument.metadata 字段：MinerU 分配的 batchId，用于排障和外部任务关联。
      */
     public static final String META_BATCH_ID = "minerU.batchId";
 
     /**
-     * ParsedDocument.metadata 字段:zip 下载 URL
+     * ParsedDocument.metadata 字段：结果 ZIP 下载 URL。该 URL 可能有时效，不应作为永久资产地址。
      */
     public static final String META_ZIP_URL = "minerU.zipUrl";
 
@@ -97,6 +100,12 @@ public class MinerUDocumentParser implements DocumentParser {
         this.redissonClient = redissonClient;
     }
 
+    /**
+     * 初始化或校准分布式许可总数。
+     * <p>
+     * 所有应用实例应使用相同 semaphoreName 和 concurrencyLimit；否则不同实例启动时可能互相
+     * 覆盖许可数量，造成限流语义不稳定。
+     */
     @PostConstruct
     void initSemaphore() {
         RPermitExpirableSemaphore semaphore = redissonClient.getPermitExpirableSemaphore(properties.getSemaphoreName());
@@ -115,7 +124,7 @@ public class MinerUDocumentParser implements DocumentParser {
         if (mimeType == null) {
             return false;
         }
-        // Excel 不纳入 MIME 自动路由：默认走 POI 简单 key-val，复杂版面由上层显式选择 MinerU
+        // Excel 不纳入 MIME 自动路由：默认走 POI 简单 key-value，复杂版面由上层显式选择 MinerU。
         String lower = mimeType.toLowerCase(Locale.ROOT);
         return lower.contains("pdf")
                 || lower.contains("wordprocessingml") || lower.contains("msword")
@@ -128,9 +137,11 @@ public class MinerUDocumentParser implements DocumentParser {
             throw new ServiceException("MinerU 解析输入字节为空");
         }
 
+        // Expirable Semaphore 返回 permitId 而不是布尔值；释放时必须携带同一 ID。
         String permitId = null;
         RPermitExpirableSemaphore semaphore = redissonClient.getPermitExpirableSemaphore(properties.getSemaphoreName());
         try {
+            // maxWait 控制用户等待许可的时间，lease 控制实例异常退出后的自动回收。
             permitId = semaphore.tryAcquire(
                     properties.getMaxWaitSeconds(),
                     properties.getLeaseSeconds(),
@@ -145,6 +156,7 @@ public class MinerUDocumentParser implements DocumentParser {
             throw new ServiceException("MinerU 获取解析许可被中断");
         } finally {
             if (permitId != null) {
+                // tryRelease 对“租约已自动过期”返回 false，因此无需把它升级为解析失败。
                 boolean released = semaphore.tryRelease(permitId);
                 if (!released) {
                     log.warn("MinerU parse permit already expired or released, permitId={}", permitId);
@@ -153,6 +165,12 @@ public class MinerUDocumentParser implements DocumentParser {
         }
     }
 
+    /**
+     * 在已经持有分布式许可的前提下执行完整外部解析链。
+     * <p>
+     * 方法按严格顺序推进，任何一步失败都会抛出异常并由外层 finally 释放许可。当前没有在
+     * MinerU 侧主动取消已提交 batch 的 API，因此本地超时后外部任务可能继续运行。
+     */
     private ParsedDocument doParseStructured(byte[] content, String mimeType, Map<String, Object> options) {
         String sourceFile = extractString(options, OPT_SOURCE_FILE, "");
         String documentId = extractString(options, OPT_DOCUMENT_ID, UUID.randomUUID().toString());
@@ -167,9 +185,10 @@ public class MinerUDocumentParser implements DocumentParser {
         minerUClient.uploadFile(ticket.uploadUrl(), content);
         log.info("MinerU 源文件上传完毕 documentId={} batchId={}", documentId, ticket.batchId());
 
-        // 3. 阻塞 await 完成(上传后 MinerU 自动提交解析)
+        // 3. 阻塞 await 完成（上传后 MinerU 自动提交解析）。
         MinerUStatus status;
         try {
+            // Future 内部有业务 deadline，外层 get 再增加 30 秒，防止调度线程卡住导致永久等待。
             status = pollingExecutor
                     .submitAndAwait(ticket.batchId(), Duration.ofSeconds(properties.getTimeoutSeconds()))
                     .get(properties.getTimeoutSeconds() + 30, TimeUnit.SECONDS);
@@ -192,7 +211,7 @@ public class MinerUDocumentParser implements DocumentParser {
         // 5. 解包为 ParsedDocument
         ParsedDocument parsed = resultUnpacker.unpack(zipBytes, sourceFile, documentId);
 
-        // 6. 注入 batchId + zipUrl 到 metadata,供 ParserNode/IngestionContext 持久化(排障 + 重试幂等)
+        // 6. 复制原 metadata 后注入外部任务信息；不原地修改 unpacker 返回的 Map。
         Map<String, Object> mergedMeta = new HashMap<>(parsed.metadata() == null ? Map.of() : parsed.metadata());
         mergedMeta.put(META_BATCH_ID, ticket.batchId());
         mergedMeta.put(META_ZIP_URL, status.zipUrl());
@@ -203,7 +222,7 @@ public class MinerUDocumentParser implements DocumentParser {
     }
 
     /**
-     * 计算上传到 MinerU 的文件名,确保带正确扩展名(MinerU 靠它识别格式)
+     * 计算上传到 MinerU 的文件名，确保带正确扩展名。
      * <p>
      * 有原始文件名直接用,否则按 mimeType 合成 {@code doc-{documentId}{ext}}
      */
@@ -214,6 +233,9 @@ public class MinerUDocumentParser implements DocumentParser {
         return "doc-" + documentId + extFromMime(mimeType);
     }
 
+    /**
+     * 把应用配置和本次文件标识组合成单文件提交请求。
+     */
     private BatchSubmitRequest buildSubmitRequest(String fileName, String documentId) {
         return new BatchSubmitRequest(
                 fileName,
@@ -225,6 +247,11 @@ public class MinerUDocumentParser implements DocumentParser {
         );
     }
 
+    /**
+     * 把常见 Office/PDF MIME 映射为 MinerU 用于识别格式的扩展名。
+     * <p>
+     * 无法识别时返回 .bin；这通常会导致远端拒绝或解析失败，而不是在本地猜测错误格式。
+     */
     private static String extFromMime(String mimeType) {
         if (mimeType == null) {
             return ".bin";
@@ -240,6 +267,9 @@ public class MinerUDocumentParser implements DocumentParser {
         return ".bin";
     }
 
+    /**
+     * 从 options 读取非空字符串，兼容任意可安全 {@code toString()} 的值。
+     */
     private static String extractString(Map<String, Object> options, String key, String defaultValue) {
         if (options == null) {
             return defaultValue;
