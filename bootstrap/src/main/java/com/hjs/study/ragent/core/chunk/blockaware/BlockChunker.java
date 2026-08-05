@@ -23,9 +23,13 @@ import com.hjs.study.ragent.core.parser.model.Block;
 import java.util.List;
 
 /**
- * Block 类型专属的切分器
+ * 单一 Parser Block 类型到 VectorChunk 的转换/切分策略接口。
  * <p>
- * 每个 Block 子类型有独立的 chunker：
+ * 与 legacy {@link com.hjs.study.ragent.core.chunk.ChunkingStrategy} 的“整篇 String 输入”不同，
+ * 本接口一次只处理一个强类型 Block，因此能保留表头、资产和代码等结构语义。实现类均为无状态
+ * Spring 单例。
+ * <p>
+ * 当前分工：
  * <ul>
  *   <li>HeadingHandler：累积 outlinePath，不产 chunk</li>
  *   <li>ParagraphChunker：按 token 切，不跨 heading</li>
@@ -40,11 +44,14 @@ import java.util.List;
 public interface BlockChunker<B extends Block> {
 
     /**
-     * 把单个 Block 切分为若干 VectorChunk
+     * 把单个 Block 转换为零到多个 VectorChunk。
+     * <p>
+     * 结果必须保持 Block 内部顺序，首个 index 使用 ctx.startIndex，后续单调递增。Dispatcher 会
+     * 累加数量，并在最后交给 ChunkPacker 统一合并和重排。
      *
      * @param block 待切分的 Block
      * @param ctx   切分上下文（outlinePath + 配置 + 起始 index）
-     * @return 切分结果（可能为空列表，如 HeadingHandler）
+     * @return 切分结果；空/无效内容可返回空列表
      */
     List<VectorChunk> chunk(B block, ChunkContext ctx);
 }

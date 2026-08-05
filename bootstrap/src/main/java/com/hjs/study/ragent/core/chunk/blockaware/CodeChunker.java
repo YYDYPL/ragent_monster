@@ -26,14 +26,18 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 代码块 chunker：每个 CodeBlock 产生一个 atomic VectorChunk
+ * CodeBlock 到原子 VectorChunk 的转换器。
  * <p>
- * 永不切分 —— 代码块语法对完整性敏感（缺少 fence 或半截行会破坏前端渲染与 LLM 理解）
- * 渲染为标准 markdown 代码块 ``` 围栏
+ * 代码永不按 maxChars 切分：语法完整性优先于体量预算，因此超长代码可能产生超过预算的 Chunk。
+ * content 恢复标准 Markdown 围栏，embeddingText 留空，由 ChunkEmbeddingService 使用同一正文。
+ * ChunkPacker 把 CODE 视为原子边界，不与两侧段落合并，也不跨它做重叠。
  */
 @Component
 public class CodeChunker implements BlockChunker<CodeBlock> {
 
+    /**
+     * 将单个代码块完整渲染为一个 CODE Chunk。
+     */
     @Override
     public List<VectorChunk> chunk(CodeBlock block, ChunkContext ctx) {
         if (block == null) {
@@ -41,6 +45,7 @@ public class CodeChunker implements BlockChunker<CodeBlock> {
         }
         String language = block.language() == null ? "" : block.language();
         String code = block.code() == null ? "" : block.code();
+        // CodeBlock.code 不含外层围栏；在展示文本中统一补回。
         String markdown = "```" + language + "\n" + code + "\n```";
 
         VectorChunk chunk = VectorChunk.builder()

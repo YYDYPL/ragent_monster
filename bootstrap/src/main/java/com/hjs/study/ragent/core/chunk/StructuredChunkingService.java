@@ -31,55 +31,68 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * 结构化分块服务（统一分块入口）
+ * 结构化与纯文本分块的统一决策入口。
  * <p>
- * 封装"<b>blocks 非空 → block-aware 分发；否则 → 纯文本 legacy 策略</b>"的唯一判断，
+ * 路径优先级为“整篇模式 → block-aware → legacy text”。把判断收口在这里，可以保证 Pipeline
+ * 与简单分块模式使用同一语义，避免表格等结构在某条入口被提前拍平成普通字符串。
+ * <p>
+ * 本服务只生成未嵌入的 {@link VectorChunk}，Embedding 由 {@link ChunkEmbeddingService} 完成，
+ * 持久化由知识服务和索引装饰器完成。
+ * <p>
+ * 封装“<b>blocks 非空 → block-aware 分发；否则 → 纯文本 legacy 策略</b>”的唯一判断，
  * 供两条分块入口共用：
  * <ul>
  *   <li>{@code ingestion} 流水线的 ChunkerNode（Pipeline 模式）</li>
  *   <li>{@code knowledge} 文档的 KnowledgeDocumentServiceImpl（简单分块模式）</li>
  * </ul>
  * 两处曾各写各的，导致简单分块模式漏接 block-aware（表格被拍平成文本后随意切碎）；
- * 收口到此服务后单一真相源，杜绝再次漂移
+ * 收口到此服务后形成分块路径的单一真相源。
  */
 @Service
 @RequiredArgsConstructor
 public class StructuredChunkingService {
 
+    /** 强类型 Block 分发、专用切分和最终打包链。 */
     private final BlockAwareChunkerDispatcher blockAwareChunkerDispatcher;
+
+    /** 仅供没有 Block 时使用的 legacy 纯文本策略注册表。 */
     private final ChunkingStrategyFactory chunkingStrategyFactory;
 
     /**
-     * 不分块哨兵：chunkSize/targetChars 取该值时整篇文档合成单个 chunk，不再切分
+     * 不分块哨兵：chunkSize 或 targetChars 取该值时整篇文档合成单个 Chunk。
      */
     public static final int WHOLE_DOCUMENT_SENTINEL = -1;
     /**
-     * 体量预算默认值（ChunkingOptions 未提供 size 键时用）
+     * 从 legacy 配置无法取得正数体量键时，block-aware 使用的默认字符预算。
      */
     private static final int DEFAULT_MAX_CHARS = 512;
     /**
-     * 段落重叠默认值
+     * 从 legacy 配置无法取得非负重叠键时，block-aware 使用的默认重叠预算。
      */
     private static final int DEFAULT_OVERLAP = 64;
     /**
-     * 表格每 chunk 最大数据行数（硬上限；实际块大小由体量预算驱动）
+     * 表格每 Chunk 最大数据行数；这是硬上限，实际分组还受 key-value 字符预算约束。
      */
     private static final int DEFAULT_ROWS_PER_CHUNK = 50;
     /**
-     * 列表 atomic 阈值默认值
+     * 列表保持原子结构的默认最大项目数。
      */
     private static final int DEFAULT_MAX_LIST_ITEMS = 15;
     /**
-     * 长列表每 chunk 项数默认值
+     * 超过原子阈值后，每个列表 Chunk 的默认项目数。
      */
     private static final int DEFAULT_LIST_ITEMS_PER_CHUNK = 10;
 
     /**
-     * 分块：blocks 非空走 block-aware，否则用 fallbackText 走 legacy 文本策略
+     * 根据输入结构与配置选择唯一分块路径。
+     * <p>
+     * 整篇模式优先于 blocks 判断；因此即使已有 TableBlock/ImageBlock，也会被统一渲染到一个
+     * DOCUMENT Chunk，丢失专用 embeddingText 和 assets 等分块级结构信息，这是用户明确选择
+     * “不分块”后的设计结果。
      *
      * @param blocks       解析产出的结构化 Block，可空
      * @param fallbackText blocks 为空时的纯文本兜底
-     * @param mode         legacy 文本策略类型（blocks 为空时使用）
+     * @param mode         legacy 文本策略类型，仅 blocks 为空且非整篇模式时使用
      * @param options      legacy 文本策略参数，同时用于派生 block-aware 体量预算
      * @param rowsPerChunk block-aware 表格行上限，可空取默认
      * @return VectorChunk 列表（未嵌入）；blocks 与 fallbackText 都空时返回空列表
@@ -100,7 +113,9 @@ public class StructuredChunkingService {
     }
 
     /**
-     * 判断是否为"不分块"：任一 size 键（chunkSize/targetChars）取哨兵值 {@code -1}
+     * 判断是否为整篇模式。
+     * <p>
+     * 通过 toConfigMap 读取不同 record 的稳定外部键；其他负数不会被当作哨兵。
      */
     private static boolean isWholeDocument(ChunkingOptions options) {
         if (options == null) {
@@ -117,9 +132,12 @@ public class StructuredChunkingService {
     }
 
     /**
-     * 整篇合成单个 chunk：内容取 fallbackText（解析渲染或增强后的全文），缺失时回退到 blocks 渲染
+     * 把整篇文档物化为单个 DOCUMENT Chunk。
+     * <p>
+     * 优先使用 fallbackText，因为它可能是增强后的全文；缺失时才用 BlockTextRenderer。所有 Block
+     * ID 都保留在 sourceBlockIds 中，但不会搬运 ImageBlock.assets。
      *
-     * @return 单元素列表；全文为空时返回空列表
+     * @return 单元素列表；全文为空白时返回空列表
      */
     private List<VectorChunk> wholeDocumentChunk(List<Block> blocks, String fallbackText) {
         String whole = StringUtils.hasText(fallbackText)
@@ -142,10 +160,11 @@ public class StructuredChunkingService {
     }
 
     /**
-     * 从 legacy ChunkingOptions 派生 BlockChunkConfig，使 block-aware 与文本策略共用同一组体量参数
+     * 从 legacy ChunkingOptions 派生 block-aware 强类型配置。
      * <p>
-     * maxChars 预算优先取 chunkSize（固定大小）/ targetChars（语义感知）；overlap 同理
-     * rowsPerChunk 由调用方透传，缺省取硬上限默认值
+     * size 优先级是 chunkSize → targetChars → maxChars；重叠优先级是 overlapSize →
+     * overlapChars。若 overlap 不小于 maxChars，会钳制为 maxChars-1，以满足 BlockChunkConfig
+     * 构造约束。rowsPerChunk 由调用方透传，非正值回退默认。
      */
     private BlockChunkConfig toBlockChunkConfig(ChunkingOptions options, Integer rowsPerChunk) {
         Map<String, Integer> cfg = options == null ? Map.of() : options.toConfigMap();
@@ -160,7 +179,9 @@ public class StructuredChunkingService {
     }
 
     /**
-     * 按 keys 顺序取第一个存在且为正的值，否则返回默认
+     * 按兼容键优先级取第一个正数体量值。
+     * <p>
+     * 这里忽略 -1，因为整篇哨兵已在入口提前处理。
      */
     private static int firstPositive(Map<String, Integer> cfg) {
         for (String key : new String[]{"chunkSize", "targetChars", "maxChars"}) {
@@ -173,7 +194,7 @@ public class StructuredChunkingService {
     }
 
     /**
-     * 按 keys 顺序取第一个存在且非负的值（重叠允许为 0），否则返回默认
+     * 按兼容键优先级取第一个非负重叠值；0 表示禁用重叠。
      */
     private static int firstNonNegative(Map<String, Integer> cfg) {
         for (String key : new String[]{"overlapSize", "overlapChars"}) {

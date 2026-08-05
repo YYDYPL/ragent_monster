@@ -30,11 +30,21 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 分块结果对象
- * 统一的分块输出格式，包含所有必要信息
+ * 分块阶段的统一可变结果 DTO，也是 Embedding 与多种索引后端之间的数据载体。
  * <p>
- * <b>v1.1 新增字段</b>（多模态解析改造）：assets / blockType / outlinePath / sourceBlockIds / sectionContext
- * 所有新字段都有默认空值，老数据可空兼容（DB schema 无需改动，可序列化到 metadata 或独立列）
+ * 对象按阶段逐步填充：Chunker 先写文本与来源，{@link ChunkEmbeddingService} 再原地写入
+ * embedding，最后关系库与向量/关键词/图谱索引读取各自需要的字段。因此这里使用 Lombok 可变
+ * Bean，而不是 record。
+ * <p>
+ * 必须区分三个文本/上下文字段：
+ * <ul>
+ *   <li>{@link #content}：展示、持久化和 LLM 上下文使用的正文；</li>
+ *   <li>{@link #embeddingText}：只用于向量化的优化文本，例如表格 key-value；</li>
+ *   <li>{@link #sectionContext}：Sheet、表头等辅助上下文，可同时进入 embeddingText 或检索上下文。</li>
+ * </ul>
+ * <p>
+ * 多模态字段都有空集合默认值，兼容旧数据。Builder 默认值只在 Lombok builder 未显式赋值时
+ * 生效；全参构造器、Setter 或反序列化仍可能传入 null，消费者需要保持空值防御。
  */
 @Data
 @NoArgsConstructor
@@ -43,24 +53,28 @@ import java.util.Map;
 public class VectorChunk {
 
     /**
-     * 块的唯一标识符
+     * Chunk 唯一标识符。
+     * <p>
+     * 算法生成时通常使用雪花 ID；它与 Parser 的 Block.id、文档 docId 是三个不同身份空间。
      */
     private String chunkId;
 
     /**
-     * 块在文档中的序号索引，从0开始
+     * Chunk 在当前文档中的顺序索引，从 0 开始。
+     * <p>
+     * 专用 Chunker 先用 ChunkContext.startIndex 编号，ChunkPacker 合并后会统一重排。
      */
     private Integer index;
 
     /**
-     * 块的原始文本内容
-     * 用于展示与回填 LLM 上下文（表格场景为 markdown 表格）
+     * 对外可见的 Chunk 正文，用于关系库保存、管理端展示与回填 LLM 上下文。
+     * 表格为 Markdown，代码保留围栏，图片为描述加 Markdown 图片链接。
      */
     private String content;
 
     /**
-     * 嵌入专用文本，仅用于计算向量，不持久化、不展示
-     * 为空时 {@link ChunkEmbeddingService} 回退到 {@link #content}
+     * 嵌入专用文本，仅用于计算向量，不参与 JSON 序列化。
+     * 为空时 {@link ChunkEmbeddingService} 回退到 {@link #content}。
      * 表格 chunk 用 key-value 表示填充此字段（如 "姓名: 张三; 年龄: 25"），
      * 因 markdown 表格行的列名↔值靠位置对齐，embedding 模型读不懂位置，检索效果差
      */
@@ -68,51 +82,58 @@ public class VectorChunk {
     private String embeddingText;
 
     /**
-     * 块的元数据信息
+     * 通用 Chunk 元数据扩展区。
+     * <p>
+     * 强类型的资产、章节和来源字段不要重复塞入此 Map；该字段主要兼容索引后端的附加属性。
      */
     @Builder.Default
     private Map<String, Object> metadata = new HashMap<>();
 
     /**
-     * 块的向量嵌入表示
-     * 用于向量相似度检索的浮点数数组
+     * 向量嵌入，按 Embedding 模型维度生成。
+     * <p>
+     * 通过 {@code @JsonIgnore} 避免普通 API 输出庞大的浮点数组，但向量存储实现会直接读取它。
      */
     @JsonIgnore
     private float[] embedding;
 
     /**
-     * 资产引用列表（图片等）
-     * 由 BlockAwareChunker 在切分阶段从 ImageBlock 等直接挂载，无需反向 grep markdown
-     * 检索时用于将图片 URL 注入 LLM 上下文（本轮：前端 markdown 渲染展示;未来：多模态 LLM 输入）
+     * 图片等二进制资产的结构化引用。
+     * <p>
+     * Block-aware 链路直接从 ImageBlock 复制，避免从 Markdown 字符串反向解析 URL。ChunkPacker
+     * 合并图片与正文时会保留这些引用。
      */
     @Builder.Default
     private List<AssetRef> assets = new ArrayList<>();
 
     /**
-     * 块的来源类型，对应 {@link com.hjs.study.ragent.core.parser.model.Block} 子类型
-     * 取值如：HEADING / PARAGRAPH / TABLE / IMAGE / CODE / LIST / FORMULA
-     * 检索时可按 blockType 分流重排序（表格走 BM25 + 向量，纯文本走纯向量等）
+     * 内容来源类型，对应 Parser Block 或整篇模式。
+     * <p>
+     * 当前常见值为 DOCUMENT、PARAGRAPH、TABLE、IMAGE、CODE、LIST。标题只更新章节路径，不直接
+     * 产生 HEADING Chunk；ChunkPacker 合并异质可流动块后统一标为 PARAGRAPH。
      */
     private String blockType;
 
     /**
-     * 章节层级路径，如 ["第3章", "3.2 销售分析"]
-     * 由 BlockAwareChunker 通过 HeadingHandler 累积注入
-     * 检索时拼接进 user message，让 LLM 知道命中段落属于哪个章节
+     * 章节层级路径，如 ["第3章", "3.2 销售分析"]。
+     * 由 HeadingHandler 按 Block 顺序累积，打包合并时取所有成员路径的最长公共前缀。
      */
     @Builder.Default
     private List<String> outlinePath = new ArrayList<>();
 
     /**
-     * 来源 Block.id 列表，用于精确溯源
-     * Table chunk 包含 1 个 TableBlock id；Paragraph chunk 可能包含多个 ParagraphBlock id（合并切分时）
+     * 来源 Parser Block.id 列表，用于从 Chunk 反查原始结构块。
+     * <p>
+     * 单块切分通常只有一个 ID；多个小块经 ChunkPacker 合并后会形成去重并集。
      */
     @Builder.Default
     private List<String> sourceBlockIds = new ArrayList<>();
 
     /**
-     * 节级上下文（如表头、sheet 名等），检索时可与 content 一起拼接给 LLM
-     * 例如 TableChunker 把 sheetName + 表头摘要写入此字段，LLM 看到切碎的表格行也有上下文
+     * 节级上下文，如 Sheet、caption 和表头摘要。
+     * <p>
+     * TableChunker 会同时把它放进 embeddingText；图片目前只在有 Sheet 来源时填写。合并多个
+     * Chunk 时打包器保留第一个非空值，因此它不是完整的多值集合。
      */
     private String sectionContext;
 }

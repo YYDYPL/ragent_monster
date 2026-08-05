@@ -26,16 +26,21 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 列表 chunker：
+ * ListBlock 的按项目分组切分器：
  * <ul>
  *   <li>短列表（items.size() ≤ maxListItems）：atomic，整列表一个 chunk</li>
  *   <li>长列表：按 listItemsPerChunk 分组，每组一个 chunk</li>
  * </ul>
- * 渲染为标准 markdown 列表（{@code -} 或 {@code 1.}）
+ * 渲染为标准 Markdown 列表（{@code -} 或 {@code 1.}）。阈值按项目数而不是字符数判断，因此
+ * 单个超长列表项可能突破 maxChars；这是保持列表项原子性的取舍。第一阶段产出的 LIST Chunk
+ * 仍属于可流动块，ChunkPacker 可以把它与相邻段落或图片继续合并。
  */
 @Component
 public class ListChunker implements BlockChunker<ListBlock> {
 
+    /**
+     * 保留项目顺序切分列表；长有序列表的后续分组会延续原始全局编号。
+     */
     @Override
     public List<VectorChunk> chunk(ListBlock block, ChunkContext ctx) {
         if (block == null || block.items() == null || block.items().isEmpty()) {
@@ -45,11 +50,11 @@ public class ListChunker implements BlockChunker<ListBlock> {
         int max = ctx.config().maxListItems();
 
         if (items.size() <= max) {
-            // 短列表 atomic
+            // startNumber=1；有序短列表从 1 开始，无序列表忽略该参数。
             return List.of(buildChunk(items, 1, block, ctx, ctx.startIndex()));
         }
 
-        // 长列表按组切
+        // i 是原列表的零基偏移，因此 startNumber=i+1 能维持有序列表连续编号。
         int per = ctx.config().listItemsPerChunk();
         List<VectorChunk> result = new ArrayList<>();
         int chunkIndex = ctx.startIndex();
@@ -62,7 +67,9 @@ public class ListChunker implements BlockChunker<ListBlock> {
     }
 
     /**
-     * 构造列表 chunk。{@code startNumber} 仅对有序列表生效，作为本 chunk 起始编号。
+     * 构造一组列表项对应的临时 Chunk。
+     *
+     * @param startNumber 有序列表在本组中的起始显示编号；无序列表忽略
      */
     private VectorChunk buildChunk(List<String> items, int startNumber, ListBlock block,
                                    ChunkContext ctx, int chunkIndex) {

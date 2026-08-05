@@ -29,36 +29,42 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Chunk 打包器（block-aware 分块后处理）
+ * block-aware 第一阶段后的贪心 Chunk 打包器。
  * <p>
- * 各类型 chunker 只负责"单个 block 内"的切分, 天然是"只拆不并": 一个短段落、一个短列表都会各自成块,
- * 512 体量预算只当上限、从不当目标, 于是结构清晰的小文档被切成一堆碎块
+ * 各专用 Chunker 只负责单个 Block 内的“转换/拆分”，短段落和短列表天然各自成块。如果直接索引，
+ * 字符预算只成为上限而不是目标，会产生大量缺少上下文的小碎片。本类在保持顺序的前提下合并
+ * 相邻可流动块，使结果接近 maxChars。
  * <p>
- * 本打包器在 dispatch 产出的有序 chunk 上做一次贪心合并: 把相邻的<b>可流动块</b>(段落 / 列表 / 图片)累加到接近
- * {@code maxChars} 再落块, 遇到<b>原子块</b>(表格 / 代码)或已达体量上限的大块就断开, 使块大小真正贴合预算
+ * PARAGRAPH、LIST、IMAGE 是可流动块；TABLE、CODE 以及自身长度不小于预算的 Chunk 是原子边界。
+ * 预算按 content 字符数计算，不按 embeddingText 或模型 Token 计算。原子块可能天然超过预算，本类
+ * 会原样保留。
+ * <p>
+ * 正常调用时打包发生在 Embedding 之前。若传入已经带向量或 metadata 的 Chunk，多块合并产生的
+ * 新对象不会继承 embedding/metadata；调用顺序不应颠倒。
  */
 @Component
 public class ChunkPacker {
 
     /**
-     * 可合并的块类型: 文本流与图片引用, 相邻小块可拼到同一 chunk; 表格 / 代码等结构完整块保持原子
+     * 可合并类型集合。使用字符串是因为 VectorChunk 是跨索引边界 DTO，而不是密封类型层次。
      */
     private static final Set<String> MERGEABLE_TYPES = Set.of("PARAGRAPH", "LIST", "IMAGE");
     /**
-     * 合并时块间分隔符, 保留段落 / 列表边界
+     * 合并时使用双换行保留段落、列表和图片之间的 Markdown 边界。
      */
     private static final String SEPARATOR = "\n\n";
 
     /**
-     * 贪心打包: 相邻可合并 chunk 累加至 maxChars, 原子块与超限大块原样保留, 最后重排 index
+     * 贪心打包相邻 Chunk，并在可流动块边界建立完整块级重叠。
      * <p>
-     * 断块时以<b>块级重叠</b>衔接: 用上一块尾部若干个<b>完整</b>可合并块(累计不超过 overlapChars 预算)作为下一块的起点,
-     * 既复现跨块上下文、又不切碎段落 / 列表项 / 标题. 重叠计入 maxChars 预算, 保证块体量不超上限
+     * 断块时从上一 buffer 尾部选择若干完整 Chunk 作为下一组起点，不截取半个段落。重叠和分隔符
+     * 都计入 maxChars；若当前 Chunk 已经太大，没有剩余预算则不携带重叠。原子块会清空合并链，
+     * 两侧不互相重叠。
      *
      * @param chunks       dispatch 产出的有序 chunk
      * @param maxChars     单块体量预算(合并上限)
      * @param overlapChars 块级重叠预算(尾部完整块的累计字符上限, 0 表示不重叠)
-     * @return 打包后的 chunk, index 从 0 单调递增
+     * @return 打包后的有序 Chunk；通常 index 从 0 重排，输入不足两个时原样返回
      */
     public List<VectorChunk> pack(List<VectorChunk> chunks, int maxChars, int overlapChars) {
         if (chunks == null || chunks.size() <= 1) {
@@ -70,7 +76,7 @@ public class ChunkPacker {
         int bufferLen = 0;
 
         for (VectorChunk c : chunks) {
-            // 原子块 / 已超预算的大块: 先冲刷缓冲区, 自身原样落块并断开合并链(原子块两侧不做重叠)
+            // 原子块先冲刷前方文本，再原样落盘；它同时截断重叠传播。
             if (!isMergeable(c, maxChars)) {
                 flush(buffer, result);
                 buffer.clear();
@@ -81,7 +87,7 @@ public class ChunkPacker {
 
             int addLen = contentLength(c);
             int sepLen = buffer.isEmpty() ? 0 : SEPARATOR.length();
-            // 再加会超预算: 先冲刷, 用尾部完整块作为重叠起点(留出容纳当前块的余量, 保证不超 maxChars)
+            // 为当前块预留正文和一个分隔符空间后，剩余预算才可用于上一组尾部重叠。
             if (!buffer.isEmpty() && bufferLen + sepLen + addLen > maxChars) {
                 flush(buffer, result);
                 // 重叠预算需同时扣除当前块与其前面的分隔符长度，否则合并结果可能超出 maxChars
@@ -100,7 +106,10 @@ public class ChunkPacker {
     }
 
     /**
-     * 取缓冲区尾部若干完整块作为下一块的重叠起点: 从后往前累加, 累计字符不超 budget, 保持原顺序
+     * 从缓冲区尾部选择预算内的连续完整 Chunk，并恢复原顺序。
+     * <p>
+     * 若最末 Chunk 已超过 overlap 预算，直接停止，不跳过它去选择更早内容，因为那会破坏“尾部上下文”
+     * 语义。
      *
      * @return 可变新列表(可能为空); 元素为原 chunk 引用(内容在下一块中被复现)
      */
@@ -123,7 +132,7 @@ public class ChunkPacker {
     }
 
     /**
-     * 缓冲区当前拼接长度(含块间分隔符)
+     * 计算缓冲区按最终分隔符拼接后的 content 长度。
      */
     private static int bufferedLength(List<VectorChunk> buffer) {
         int len = 0;
@@ -134,16 +143,16 @@ public class ChunkPacker {
     }
 
     /**
-     * 可合并: 类型属于可流动块(文本 / 图片), 且自身未达体量上限(超限大块是切分产物, 视为原子, 不再粘连)
+     * 判断 Chunk 是否能进入流动缓冲区。
      * <p>
-     * 图片一律并入相邻上下文(不分有无描述): 图与它的前导语 / 解释文字同块, 检索命中即带图, 也不割裂正文
+     * 图片无论是否有 VLM 描述都可与邻近文字合并，使检索命中说明文字时同时携带 AssetRef。
      */
     private static boolean isMergeable(VectorChunk c, int maxChars) {
         return MERGEABLE_TYPES.contains(c.getBlockType()) && contentLength(c) < maxChars;
     }
 
     /**
-     * 冲刷缓冲区: 空则跳过, 单块原样搬运, 多块合并成一个 chunk
+     * 将当前缓冲区物化到结果：空则跳过，单元素复用原对象，多元素创建合并对象。
      */
     private static void flush(List<VectorChunk> buffer, List<VectorChunk> result) {
         if (buffer.isEmpty()) {
@@ -157,9 +166,11 @@ public class ChunkPacker {
     }
 
     /**
-     * 合并多块: 内容按 SEPARATOR 拼接, outlinePath 取最长公共前缀(退化到共同祖先章节),
-     * sourceBlockIds / assets 去重并集(无描述图片并入正文后其 AssetRef 仍随块留存),
-     * blockType 同质则保留、异质归为 PARAGRAPH(仍是纯文本流)
+     * 合并多块并传播结构化字段。
+     * <p>
+     * content 按双换行拼接；outlinePath 取最长公共前缀；sourceBlockIds 保序去重；assets 按成员
+     * 顺序连接（当前不去重）；blockType 同质时保留，异质时归为 PARAGRAPH。sectionContext 只取
+     * 第一个非空值。新对象不继承成员 metadata、embedding 和原 chunkId。
      */
     private static VectorChunk merge(List<VectorChunk> buffer) {
         StringBuilder content = new StringBuilder();
@@ -175,9 +186,7 @@ public class ChunkPacker {
                 content.append(SEPARATOR);
             }
             content.append(c.getContent() == null ? "" : c.getContent());
-            // embeddingText 不能在合并时丢弃：图片块特意用「无 URL 噪声」的描述文本做向量化，
-            // 丢弃后 embedding 会退化为携带原始 URL 的 content。任一块显式提供 embeddingText
-            // 时，合并块按「显式值优先、否则回退 content」逐块拼接
+            // 只要任一成员显式优化过向量文本，合并结果就逐块使用“显式值优先、否则 content”。
             String effectiveEmbedding = c.getEmbeddingText() != null && !c.getEmbeddingText().isBlank()
                     ? c.getEmbeddingText()
                     : c.getContent();
@@ -190,7 +199,7 @@ public class ChunkPacker {
                 }
                 embeddingText.append(effectiveEmbedding);
             }
-            // sectionContext 取首个非空值（合并块与 outlinePath 一样归属共同上级章节）
+            // sectionContext 不是集合；当前采用“首个非空值”策略，避免机械拼出矛盾上下文。
             if (sectionContext == null && c.getSectionContext() != null && !c.getSectionContext().isBlank()) {
                 sectionContext = c.getSectionContext();
             }
@@ -217,7 +226,9 @@ public class ChunkPacker {
     }
 
     /**
-     * 多块 outlinePath 的最长公共前缀: 合并块横跨若干小节时, 归属其共同上级章节
+     * 计算所有成员章节路径的最长公共前缀。
+     * <p>
+     * 若合并横跨兄弟小节，结果退回共同父章节；完全无共同路径时返回空列表。
      */
     private static List<String> commonPrefix(List<VectorChunk> buffer) {
         List<String> prefix = new ArrayList<>(safePath(buffer.get(0)));
@@ -233,10 +244,12 @@ public class ChunkPacker {
         return prefix;
     }
 
+    /** 把旧数据中的 null outlinePath 规范化为空列表。 */
     private static List<String> safePath(VectorChunk c) {
         return c.getOutlinePath() == null ? List.of() : c.getOutlinePath();
     }
 
+    /** 预算只统计非空 content 的 Java 字符长度。 */
     private static int contentLength(VectorChunk c) {
         return StringUtils.hasText(c.getContent()) ? c.getContent().length() : 0;
     }

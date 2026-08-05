@@ -18,9 +18,14 @@
 package com.hjs.study.ragent.core.chunk.blockaware;
 
 /**
- * BlockAwareChunker 切分配置
+ * block-aware 分块链共享的强类型配置快照。
  * <p>
- * 提供常用的切分参数；具体 chunker 按需读取自己关心的字段
+ * {@link com.hjs.study.ragent.core.chunk.StructuredChunkingService} 从 legacy ChunkingOptions 中
+ * 提取通用字符预算，再加上表格和列表默认值构造本 record。各专用 Chunker 只读取自己关心的
+ * 字段，避免继续传播弱类型 Map。
+ * <p>
+ * 所有“大小”均按 Java {@link String#length()} 字符单元计算，不是模型 Token 数。紧凑构造器在
+ * 边界处 fail-fast，防止 overlap 导致步长为零或行/项分组死循环。
  *
  * @param maxChars          单个 chunk 最大字符数（ParagraphChunker / CodeChunker 长块切分时用）
  * @param overlapChars      chunk 重叠字符数（ParagraphChunker token 切分时用）
@@ -37,12 +42,20 @@ public record BlockChunkConfig(
 ) {
 
     /**
-     * 默认配置（用于测试 / 早期未配置场景）
+     * 创建便于测试和独立调用的默认配置。
+     * <p>
+     * 这里 rowsPerChunk=5 偏向小型测试；统一业务入口的默认值是 50，不应把两者误认为同一套
+     * 产品配置。
      */
     public static BlockChunkConfig defaults() {
         return new BlockChunkConfig(512, 64, 5, 15, 10);
     }
 
+    /**
+     * 校验所有算法都依赖的数值不变量。
+     *
+     * @throws IllegalArgumentException 任一预算无法形成有效正向切分
+     */
     public BlockChunkConfig {
         if (maxChars <= 0) {
             throw new IllegalArgumentException("maxChars must be > 0, got " + maxChars);

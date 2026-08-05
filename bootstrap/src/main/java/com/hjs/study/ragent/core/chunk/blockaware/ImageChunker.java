@@ -27,14 +27,23 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 图片 chunker：每个 ImageBlock 产生一个 atomic VectorChunk
+ * ImageBlock 到原子 VectorChunk 的多模态转换器。
  * <p>
- * 渲染为 markdown 图片链接 {@code ![caption](http://...)}，保证整段不会被切碎
- * 同时把 ImageBlock 的 AssetRef 挂载到 VectorChunk.assets，检索时可用
+ * 展示正文包含 Markdown 图片链接；若 Parser 已通过 VLM 生成 description，则把描述放在链接前，
+ * 并单独作为 embeddingText，防止长 URL 和 Markdown 符号污染向量。AssetRef 还会结构化挂载到
+ * VectorChunk.assets，供索引和展示链路直接读取。
+ * <p>
+ * IMAGE 对专用 Chunker 是原子块，不会在本类内切碎；但它属于 ChunkPacker 的可流动类型，会与
+ * 邻近说明段落合并，让“前导文字 + 图片”一起被召回。
  */
 @Component
 public class ImageChunker implements BlockChunker<ImageBlock> {
 
+    /**
+     * 将有效图片转换成单个 IMAGE Chunk。
+     *
+     * @return block 或 asset 为空时返回空列表
+     */
     @Override
     public List<VectorChunk> chunk(ImageBlock block, ChunkContext ctx) {
         if (block == null || block.asset() == null) {
@@ -42,18 +51,18 @@ public class ImageChunker implements BlockChunker<ImageBlock> {
         }
         AssetRef asset = block.asset();
 
+        // caption 优先于 altText；两者都空时仍生成合法的空 alt Markdown。
         String visible = pickCaption(block);
         String markdown = "![" + visible + "](" + asset.publicUrl() + ")";
 
-        // content(展示+答题):自包含描述在前 + 图片 markdown 在后;无描述(如 MinerU 抽图)回落为纯链接
+        // content 服务展示与回答；独立图片有 VLM 描述，MinerU 抽图目前通常只有链接/caption。
         String description = block.description();
         boolean hasDescription = description != null && !description.isBlank();
         String content = hasDescription
                 ? description.strip() + "\n\n" + markdown
                 : markdown;
 
-        // embeddingText(只做向量):用描述原文,去掉 ![](url) 那行 URL 噪声;
-        // 无描述则置 null,由 ChunkEmbeddingService 回退 content(MinerU 老行为不变)
+        // embeddingText 只保留语义描述；无描述时置 null，Embedding 服务会兼容回退 content。
         String embeddingText = hasDescription ? description.strip() : null;
 
         VectorChunk chunk = VectorChunk.builder()
@@ -71,6 +80,7 @@ public class ImageChunker implements BlockChunker<ImageBlock> {
         return List.of(chunk);
     }
 
+    /** 按 caption → altText → 空串的顺序选择 Markdown 可见文本。 */
     private String pickCaption(ImageBlock block) {
         if (block.caption() != null && !block.caption().isEmpty()) {
             return block.caption();
@@ -81,6 +91,9 @@ public class ImageChunker implements BlockChunker<ImageBlock> {
         return "";
     }
 
+    /**
+     * 当前只把 Excel Sheet 来源转换为节级上下文；普通文档图片返回 null。
+     */
     private String buildSectionContext(ImageBlock block) {
         if (block.provenance() == null || block.provenance().sheetName() == null) {
             return null;

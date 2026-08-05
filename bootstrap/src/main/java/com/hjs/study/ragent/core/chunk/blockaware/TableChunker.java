@@ -26,21 +26,30 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 表格 chunker：按 {@code maxChars} 体量预算累加切分数据行，<b>每个 chunk 都包含完整表头</b>
+ * TableBlock 的按行语义切分器，每个结果都携带完整表头。
  * <p>
  * 关键设计：
  * <ul>
  *   <li>headers 从 TableBlock.headers 直接取，不靠正则提取（vs 老路径的字符串 chunker）</li>
- *   <li>切分按 key-value 渲染长度累加到 maxChars 预算，{@code rowsPerChunk} 仅作硬上限，
+ *   <li>按 key-value 行文本长度贪心累加到 maxChars 预算，{@code rowsPerChunk} 作为硬上限，
  *       兼顾宽表不超 embedding 上限、窄表不过度碎片化；单行体量超预算时保持整行原子，自成一块</li>
  *   <li>content 渲染为完整 markdown 表格（展示）；embeddingText 用 key-value（嵌入）</li>
  *   <li>sectionContext 写入 sheet 名 + 表头摘要，便于检索时回填上下文</li>
  *   <li>无数据行的 TableBlock（仅 headers）：产生一个仅含表头的 chunk</li>
  * </ul>
+ * <p>
+ * maxChars 是按“各行 key-value 长度之和”估算的软预算，不包含 sectionContext、行间换行、Markdown
+ * 表头和分隔行。因此最终 content/embeddingText 可能略大于预算；单行超长时也会主动允许超限，
+ * 以免拆断一条业务记录。TABLE 被 ChunkPacker 视为原子边界，不与两侧内容合并。
  */
 @Component
 public class TableChunker implements BlockChunker<TableBlock> {
 
+    /**
+     * 把表格按字符预算和行数上限分组。
+     *
+     * @return 空表返回空列表；仅有表头时仍返回一个 TABLE Chunk
+     */
     @Override
     public List<VectorChunk> chunk(TableBlock block, ChunkContext ctx) {
         if (block == null) {
@@ -53,7 +62,7 @@ public class TableChunker implements BlockChunker<TableBlock> {
             return List.of();
         }
 
-        // maxChars 为体量预算（按 key-value 渲染长度累加），rowsPerChunk 退化为硬上限
+        // 预算按嵌入用 key-value 行估算；展示 Markdown 的长度不参与切块判断。
         int budget = Math.max(1, ctx.config().maxChars());
         int maxRows = Math.max(1, ctx.config().rowsPerChunk());
         String sectionContext = buildSectionContext(block);
@@ -61,12 +70,12 @@ public class TableChunker implements BlockChunker<TableBlock> {
         int chunkIndex = ctx.startIndex();
 
         if (rows.isEmpty()) {
-            // 仅表头：产生一个 chunk，标 blockType=TABLE
+            // 仅表头也是有意义的结构，可用于说明数据字典或空模板。
             result.add(buildChunk(headers, List.of(), block, ctx, chunkIndex, sectionContext));
             return result;
         }
 
-        // 贪心累加：超上限或（非空且加入下一行会超预算）则先切块；单行体量超预算时保持整行原子，自成一块
+        // 非空 group 加入下一行才检查预算；因此第一行无论多长都会完整保留。
         List<List<String>> group = new ArrayList<>();
         int groupCost = 0;
         for (List<String> row : rows) {
@@ -85,6 +94,9 @@ public class TableChunker implements BlockChunker<TableBlock> {
         return result;
     }
 
+    /**
+     * 同时构造展示正文和向量化正文，并复制表级溯源信息。
+     */
     private VectorChunk buildChunk(List<String> headers,
                                    List<List<String>> rows,
                                    TableBlock block,
@@ -106,11 +118,11 @@ public class TableChunker implements BlockChunker<TableBlock> {
     }
 
     /**
-     * 构造嵌入专用文本：sectionContext 作首行 + 每行 key-value
+     * 构造嵌入专用文本：sectionContext 作首行，每条数据记录转成 key-value。
      * <p>
-     * markdown 表格的列名↔值靠位置对齐，embedding 模型读不懂位置；改用 {@code 列名: 值}
-     * 把语义关系写进字面，sparse/dense 检索均更优（参考 RAGFlow、STC）
-     * sectionContext（sheet/表头等）随每块嵌入即 contextual chunking，切碎的行也带表身份
+     * Markdown 表格的列值关系依赖位置；改用 {@code 列名: 值} 把关系显式写入字面。
+     * sectionContext 随每块嵌入，相当于轻量 contextual chunking，使切分后的行仍知道所属 Sheet
+     * 和完整表头。
      */
     private String buildEmbeddingText(List<String> headers, List<List<String>> rows, String sectionContext) {
         String kvRows = renderKeyValueRows(headers, rows);
@@ -124,7 +136,7 @@ public class TableChunker implements BlockChunker<TableBlock> {
     }
 
     /**
-     * 把数据行渲染成 key-value 文本：每行用 {@link #renderKeyValueRow} 渲染（跳过整行空），多行用换行连接
+     * 把多条数据行渲染成换行分隔的 key-value 文本；全空行不输出。
      */
     private String renderKeyValueRows(List<String> headers, List<List<String>> rows) {
         StringBuilder sb = new StringBuilder();
@@ -142,9 +154,9 @@ public class TableChunker implements BlockChunker<TableBlock> {
     }
 
     /**
-     * 单行渲染成 key-value：{@code 列名: 值} 用 "; " 拼接，跳过空值 cell；整行空返回 ""
+     * 单行渲染成 key-value：{@code 列名: 值} 用分号拼接，跳过空值 Cell。
      * <p>
-     * 同时用作 P2 预算切分的行体量度量（length 即该行嵌入文本长度）
+     * 行长度同时用作贪心预算成本。若 row 比 headers 更宽，额外列只保留值，不伪造列名。
      */
     private String renderKeyValueRow(List<String> headers, List<String> row) {
         StringBuilder line = new StringBuilder();
@@ -166,14 +178,14 @@ public class TableChunker implements BlockChunker<TableBlock> {
     }
 
     /**
-     * 把 cell 内换行压成空格：嵌入文本无需保留换行，避免 key/value 中间夹断行影响检索
+     * 把 Cell 内换行压成空格，保证一条业务记录在 embeddingText 中占一行。
      */
     private static String oneLine(String text) {
         return text.replaceAll("\\r\\n|\\r|\\n", " ");
     }
 
     /**
-     * 渲染标准 markdown 表格（| col1 | col2 | + 分隔行 + 数据行）
+     * 渲染展示用标准 Markdown 表格：表头、分隔行和数据行。
      */
     private String renderMarkdownTable(List<String> headers, List<List<String>> rows) {
         StringBuilder sb = new StringBuilder();
@@ -189,6 +201,7 @@ public class TableChunker implements BlockChunker<TableBlock> {
         return sb.toString();
     }
 
+    /** 追加一行并对每个 Cell 做 Markdown 语法清洗。 */
     private void appendRow(StringBuilder sb, List<String> cells) {
         sb.append('|');
         for (String cell : cells) {
@@ -211,6 +224,7 @@ public class TableChunker implements BlockChunker<TableBlock> {
                 .replaceAll("\\r\\n|\\r|\\n", "<br>");
     }
 
+    /** 按列数追加 Markdown 表头分隔行。 */
     private void appendSeparator(StringBuilder sb, int colCount) {
         sb.append('|');
         sb.append("---|".repeat(Math.max(0, colCount)));
@@ -218,9 +232,10 @@ public class TableChunker implements BlockChunker<TableBlock> {
     }
 
     /**
-     * 构造 sectionContext：sheet=<name>; headers=<col1>|<col2>|...
+     * 构造表级上下文：可选 Sheet、caption 与完整表头。
      * <p>
-     * 检索 PostProcess 时可拼接到 LLM 上下文前，让 LLM 看到切碎的行 chunk 也有完整表头
+     * 该字符串既进入 embeddingText，也保存在 VectorChunk.sectionContext，便于检索后处理再次
+     * 注入 LLM 上下文。所有部分都空时返回 null。
      */
     private String buildSectionContext(TableBlock block) {
         StringBuilder ctx = new StringBuilder();

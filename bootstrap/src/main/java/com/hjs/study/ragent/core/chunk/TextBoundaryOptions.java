@@ -20,8 +20,13 @@ package com.hjs.study.ragent.core.chunk;
 import java.util.Map;
 
 /**
- * 文本边界切分配置
- * 供结构感知切分等基于文本边界的切分策略共用
+ * 基于文本边界的 legacy 策略配置，当前由
+ * {@link com.hjs.study.ragent.core.chunk.strategy.StructureAwareTextChunker} 使用。
+ * <p>
+ * 四个值都是字符数而非 Token 数。当前 record 本身不校验大小关系；算法以 {@code maxChars}
+ * 作为主要打包上限，{@code minChars}/{@code targetChars} 参与小块吸收和末块合并判断。若单个
+ * Markdown 原子块已经超过 max，算法会优先保留结构完整性而允许超限。
+ * {@code targetChars=-1} 同样是统一入口识别的“整篇不分块”哨兵。
  *
  * @param targetChars  目标块大小（字符数）
  * @param overlapChars 相邻块重叠大小（字符数）
@@ -35,6 +40,11 @@ public record TextBoundaryOptions(
         int minChars
 ) implements ChunkingOptions {
 
+    /**
+     * 导出数据库/前端使用的稳定键名。
+     *
+     * @return 不可修改的配置 Map
+     */
     @Override
     public Map<String, Integer> toConfigMap() {
         return Map.of("targetChars", targetChars, "overlapChars", overlapChars,

@@ -20,8 +20,15 @@ package com.hjs.study.ragent.core.chunk;
 import java.util.Map;
 
 /**
- * 分块配置 sealed interface
- * 通过具体 record 实现类型安全的配置传递，消除魔法字符串
+ * 纯文本分块策略使用的类型安全配置根接口。
+ * <p>
+ * 数据库和前端传入的是弱类型 JSON Map，进入核心算法前由 {@link ChunkingMode} 转换成具体
+ * record。这样策略实现只处理明确的数字字段，不需要在热路径中反复读取魔法字符串。
+ * <p>
+ * 该接口只服务于 legacy 纯文本策略；当 Parser 已产出结构化 Block 时，
+ * {@link StructuredChunkingService} 会把其中的通用体量参数再投影为
+ * {@link com.hjs.study.ragent.core.chunk.blockaware.BlockChunkConfig}。
+ * sealed 限定了当前合法配置类型，新增策略时必须同步更新 permits、ChunkingMode 和工厂注册。
  *
  * @see FixedSizeOptions 固定大小切分配置
  * @see TextBoundaryOptions 文本边界切分配置（结构感知等）
@@ -29,7 +36,12 @@ import java.util.Map;
 public sealed interface ChunkingOptions permits FixedSizeOptions, TextBoundaryOptions {
 
     /**
-     * 将配置导出为 Map，用于 API 返回和配置校验
+     * 将强类型配置导出为只读 Map。
+     * <p>
+     * 该桥接主要用于 API 展示默认值、整篇不分块哨兵判断，以及从 legacy 配置派生
+     * block-aware 预算。返回键名是外部配置契约，重命名会影响已保存的 JSON。
+     *
+     * @return 参数名到整数值的映射；当前 record 实现使用 {@link Map#of}，因此不可修改
      */
     Map<String, Integer> toConfigMap();
 }

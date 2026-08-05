@@ -26,14 +26,22 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 段落 chunker：按 maxChars 切分文本，相邻 chunk 重叠 overlapChars 字符
+ * ParagraphBlock 的字符窗口切分器。
  * <p>
- * 不跨 heading 的约束由 ChunkerNode 主流程保证（HeadingBlock 不通过 ParagraphChunker，
- * 会更新 outlinePath 但不破坏单个 ParagraphChunker 调用的 atomicity）
+ * 长度不超过 maxChars 的自然段直接形成一个临时 Chunk；超长段落按固定字符窗口切分，相邻窗口
+ * 重叠 overlapChars。这里不尝试句号/换行边界对齐，因为 Parser 已先按自然段建立 Block。
+ * <p>
+ * 本类只负责“拆”，相邻短段落是否合并由 ChunkPacker 决定。章节边界由 Dispatcher 在每次调用
+ * 时注入 outlinePath；一个 ParagraphBlock 不会跨标题。
  */
 @Component
 public class ParagraphChunker implements BlockChunker<ParagraphBlock> {
 
+    /**
+     * 切分一个自然段并复制章节与来源信息。
+     *
+     * @return 空段落返回空列表；否则至少一个 PARAGRAPH Chunk
+     */
     @Override
     public List<VectorChunk> chunk(ParagraphBlock block, ChunkContext ctx) {
         if (block == null) {
@@ -65,10 +73,11 @@ public class ParagraphChunker implements BlockChunker<ParagraphBlock> {
     }
 
     /**
-     * 按字符切分，相邻片段重叠 overlap 字符
+     * 按 Java 字符索引切分，相邻片段重叠 overlap 字符。
      * <ul>
      *   <li>text.length() ≤ maxChars：返回单元素列表</li>
-     *   <li>否则按 step = maxChars - overlap 步长切</li>
+     *   <li>否则按 {@code step=maxChars-overlap} 正向推进；</li>
+     *   <li>BlockChunkConfig 已保证 step 大于 0，不会死循环。</li>
      * </ul>
      */
     private static List<String> splitByChars(String text, int maxChars, int overlap) {

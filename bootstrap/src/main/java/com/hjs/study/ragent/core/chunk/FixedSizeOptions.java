@@ -20,7 +20,11 @@ package com.hjs.study.ragent.core.chunk;
 import java.util.Map;
 
 /**
- * 固定大小切分配置
+ * {@link com.hjs.study.ragent.core.chunk.strategy.FixedSizeTextChunker} 的配置快照。
+ * <p>
+ * 当前 record 不在构造阶段校验数值：策略会把普通 {@code chunkSize} 至少收敛到 1，并把
+ * overlap 收敛到 {@code [0, chunkSize)}。特殊值 {@code chunkSize=-1} 表示整篇不分块，既会被
+ * {@link StructuredChunkingService} 识别，也被 FixedSizeTextChunker 直接支持。
  *
  * @param chunkSize   目标块大小（字符数）
  * @param overlapSize 相邻块重叠大小（字符数）
@@ -30,6 +34,11 @@ public record FixedSizeOptions(
         int overlapSize
 ) implements ChunkingOptions {
 
+    /**
+     * 导出数据库/前端使用的稳定键名。
+     *
+     * @return 不可修改的配置 Map
+     */
     @Override
     public Map<String, Integer> toConfigMap() {
         return Map.of("chunkSize", chunkSize, "overlapSize", overlapSize);
