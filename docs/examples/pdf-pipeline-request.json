@@ -48,7 +48,7 @@
       "nodeId": "indexer-1",
       "nodeType": "indexer",
       "settings": {
-        "embeddingModel": "qwen-emb-8b",
+        "embeddingModel": "qwen-emb",
         "includeEnhancedContent": true,
         "metadataFields": [
           "category",

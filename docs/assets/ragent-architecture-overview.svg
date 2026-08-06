@@ -107,7 +107,7 @@
     <text x="1054" y="400" fill="#D5D4FF" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13">RoutingRerankService</text>
 
     <rect x="1038" y="432" width="274" height="48" rx="12" fill="#101F31" stroke="#4F77B9"/>
-    <text x="1054" y="460" fill="#CFE1FF" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13">Providers: Ollama / Bailian / SiliconFlow</text>
+    <text x="1054" y="460" fill="#CFE1FF" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13">Providers: Ollama / Bailian / DeepSeek</text>
   </g>
 
   <!-- Data stores -->

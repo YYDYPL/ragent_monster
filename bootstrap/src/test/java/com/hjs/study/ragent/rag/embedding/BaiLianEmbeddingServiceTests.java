@@ -15,26 +15,30 @@
  * limitations under the License.
  */
 
-package com.hjs.study.ragent.infra.embedding;
+package com.hjs.study.ragent.rag.embedding;
 
-import com.hjs.study.ragent.infra.enums.ModelProvider;
-import okhttp3.OkHttpClient;
-import org.springframework.stereotype.Service;
+import com.hjs.study.ragent.infra.embedding.EmbeddingService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
 
-@Service
-public class SiliconFlowEmbeddingClient extends AbstractOpenAIStyleEmbeddingClient {
+import java.util.List;
 
-    public SiliconFlowEmbeddingClient(OkHttpClient syncHttpClient) {
-        super(syncHttpClient);
-    }
+/**
+* 百炼 Embedding 联调冒烟测试（需配置 BAILIAN_API_KEY）
+*/
+@Slf4j
+@SpringBootTest
+@RequiredArgsConstructor(onConstructor = @__(@Autowired))
+public class BaiLianEmbeddingServiceTests {
 
-    @Override
-    public String provider() {
-        return ModelProvider.SILICON_FLOW.getId();
-    }
+   private final EmbeddingService embeddingService;
 
-    @Override
-    protected int maxBatchSize() {
-        return 32;
-    }
+   @Test
+   public void embeddingBaiLian() {
+       List<Float> embedded = embeddingService.embed("测试向量描述");
+       System.out.println(embedded);
+   }
 }

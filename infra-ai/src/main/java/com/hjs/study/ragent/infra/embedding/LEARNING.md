@@ -10,7 +10,7 @@
 
 这个模块是 Ragent 项目中**文本向量化（Embedding）的统一入口**。它的核心使命是：
 
-> 屏蔽阿里云百炼、SiliconFlow、Ollama、AIHubMix 等多个 Embedding 模型厂商的差异，向上层业务提供统一的 `EmbeddingService` 接口；支持单文本向量化和批量向量化，具备自动故障转移能力。
+> 屏蔽阿里云百炼、Ollama 等多个 Embedding 模型厂商的差异，向上层业务提供统一的 `EmbeddingService` 接口；支持单文本向量化和批量向量化，具备自动故障转移能力。
 
 **与 chat 模块的关系**：embedding 模块是 chat 模块的"简化镜像"——同样的分层架构（Service → Routing → Client → Abstract），同样依赖 `infra/model` 模块的 `ModelSelector` 和 `ModelRoutingExecutor` 做路由和故障转移。区别在于 embedding 没有流式场景，也没有档位机制，但多了批量分片处理。
 
@@ -43,14 +43,14 @@
                        │ EmbeddingClient  │  ← 接口
                        └────────┬─────────┘
                                 │
-                 ┌──────────────┼──────────────┬──────────────┐
-                 │              │              │              │
-    ┌────────────▼──────┐ ┌────▼────────┐ ┌───▼──────────┐ ┌▼──────────────┐
-    │SiliconFlow        │ │AIHubMix     │ │  Ollama      │ │(可扩展其他厂商)│
-    │EmbeddingClient    │ │EmbeddingCl..│ │EmbeddingCl.. │ │               │
-    └────────┬──────────┘ └───┬─────────┘ └──┬───────────┘ └───────────────┘
-             │                │              │
-             └────────────────┼──────────────┘
+                 ┌──────────────┼──────────────┐
+                 │              │              │
+    ┌────────────▼──────┐ ┌────▼────────┐ ┌▼──────────────┐
+    │BaiLian            │ │  Ollama     │ │(可扩展其他厂商)│
+    │EmbeddingClient    │ │EmbeddingCl..│ │               │
+    └────────┬──────────┘ └───┬─────────┘ └───────────────┘
+             │                │
+             └────────────────┘
                               │
            ┌──────────────────▼────────────────────┐
            │  AbstractOpenAIStyleEmbeddingClient     │  ← 抽象基类（模板方法）
@@ -166,7 +166,7 @@ public List<List<Float>> embedBatch(List<String> texts, ModelTarget target) {
 **设计要点**：
 - 初始化一个与输入等长的 null 列表，分批填充对应位置，保证输出顺序与输入一致
 - 分片之间是**串行**的（没有并行化），因为 embedding API 通常有并发限制
-- `SiliconFlowEmbeddingClient` 和 `AIHubMixEmbeddingClient` 覆写了 `maxBatchSize()=32`，而 `OllamaEmbeddingClient` 保持默认 0（不限制，本地推理没有 API 限流）
+- `BaiLianEmbeddingClient` 覆写了 `maxBatchSize()=10`（百炼 text-embedding-v4 单次请求上限），而 `OllamaEmbeddingClient` 保持默认 0（不限制，本地推理没有 API 限流）
 
 #### 4.3.2 doEmbed 的核心流程
 
@@ -199,23 +199,22 @@ public List<List<Float>> embedBatch(List<String> texts, ModelTarget target) {
 
 ---
 
-### 4.4 三个厂商实现对比
+### 4.4 厂商实现对比
 
 | 厂商 | 类名 | requiresApiKey | maxBatchSize | customizeRequestBody | 特点 |
 |------|------|:---:|:---:|------|------|
-| SiliconFlow | `SiliconFlowEmbeddingClient` | true | 32 | 继承默认（加 encoding_format） | 开源模型 MaaS |
-| AIHubMix | `AIHubMixEmbeddingClient` | true | 32 | 继承默认 | 模型聚合平台 |
+| BaiLian | `BaiLianEmbeddingClient` | true | 10 | 继承默认（加 encoding_format） | 千问 text-embedding-v4，1536 维 |
 | Ollama | `OllamaEmbeddingClient` | **false** | 0（不限制） | **空覆写**（不加 encoding_format） | 本地推理 |
 
 三个实现都只需覆写极少量方法：
 
 ```java
-// SiliconFlow: 只需 provider + 批量上限
+// BaiLian: 只需 provider + 批量上限
 @Service
-public class SiliconFlowEmbeddingClient extends AbstractOpenAIStyleEmbeddingClient {
-    public SiliconFlowEmbeddingClient(OkHttpClient syncHttpClient) { super(syncHttpClient); }
-    public String provider() { return ModelProvider.SILICON_FLOW.getId(); }
-    protected int maxBatchSize() { return 32; }
+public class BaiLianEmbeddingClient extends AbstractOpenAIStyleEmbeddingClient {
+    public BaiLianEmbeddingClient(OkHttpClient syncHttpClient) { super(syncHttpClient); }
+    public String provider() { return ModelProvider.BAI_LIAN.getId(); }
+    protected int maxBatchSize() { return 10; }
 }
 
 // Ollama: 无 API Key + 不限制批量 + 不加 encoding_format
@@ -314,19 +313,19 @@ RoutingEmbeddingService.embed("RAG 是什么？")
     │        │    ├─ defaultModel 匹配者置顶
     │        │    └─ 按 priority 升序 → id 字典序
     │        └─ buildAvailableTargets → 检查断路器健康 → 剔除不健康节点
-    │     → [qwen3-embedding, bge-large-zh, ...]
+    │     → [qwen-emb, qwen-emb-local, ...]
     │
     ├─ 2. executor.executeWithFallback(EMBEDDING, targets, resolveClient, caller)
     │     │
-    │     ├─ 尝试 qwen3-embedding (provider=siliconflow):
-    │     │   ├─ resolveClient → SiliconFlowEmbeddingClient
-    │     │   ├─ healthStore.allowCall("qwen3-embedding") → true
+    │     ├─ 尝试 qwen-emb (provider=bailian):
+    │     │   ├─ resolveClient → BaiLianEmbeddingClient
+    │     │   ├─ healthStore.allowCall("qwen-emb") → true
     │     │   └─ client.embed("RAG 是什么？", target)
     │     │        └─ doEmbed(["RAG 是什么？"], target)
-    │     │             ├─ POST /v1/embeddings
-    │     │             │   body: {"model":"Qwen/Qwen3-Embedding-8B",
+    │     │             ├─ POST /compatible-mode/v1/embeddings
+    │     │             │   body: {"model":"text-embedding-v4",
     │     │             │          "input":["RAG 是什么？"],
-    │     │             │          "dimensions":4096,
+    │     │             │          "dimensions":1536,
     │     │             │          "encoding_format":"float"}
     │     │             ├─ 200 OK
     │     │             └─ data[0].embedding → [0.023, -0.078, ...]
@@ -340,25 +339,24 @@ RoutingEmbeddingService.embed("RAG 是什么？")
 ### 5.2 一次指定模型的批量向量化
 
 ```
-业务代码: embeddingService.embedBatch(texts, "bge-large-zh")
+业务代码: embeddingService.embedBatch(texts, "qwen-emb")
     │
     ▼
-RoutingEmbeddingService.embedBatch(texts, "bge-large-zh")
+RoutingEmbeddingService.embedBatch(texts, "qwen-emb")
     │
-    ├─ 1. resolveTarget("bge-large-zh")
-    │     → 从 selectEmbeddingCandidates 中精确匹配 id="bge-large-zh"
-    │     → 找到: ModelTarget(id="bge-large-zh", provider=siliconflow, ...)
+    ├─ 1. resolveTarget("qwen-emb")
+    │     → 从 selectEmbeddingCandidates 中精确匹配 id="qwen-emb"
+    │     → 找到: ModelTarget(id="qwen-emb", provider=bailian, ...)
     │     → candidates = [这个唯一的 target]
     │
-    ├─ 2. executor.executeWithFallback(EMBEDDING, [bge-large-zh], resolveClient, caller)
+    ├─ 2. executor.executeWithFallback(EMBEDDING, [qwen-emb], resolveClient, caller)
     │     │
     │     └─ client.embedBatch(texts, target)
     │          └─ AbstractOpenAIStyleEmbeddingClient.embedBatch()
-    │               ├─ texts.size() = 100, maxBatchSize() = 32
-    │               ├─ 需要分批: [0..31] → POST → 32 vectors
-    │               ├─          [32..63] → POST → 32 vectors
-    │               ├─          [64..95] → POST → 32 vectors
-    │               └─          [96..99] → POST → 4 vectors
+    │               ├─ texts.size() = 100, maxBatchSize() = 10
+    │               ├─ 需要分批: [0..9] → POST → 10 vectors
+    │               ├─          [10..19] → POST → 10 vectors
+    │               └─          ... 直至全部完成，按原始顺序合并
     │               → 合并结果：100 个向量按原始顺序返回
     │
     └─ 3. 返回 List<List<Float>>
@@ -369,15 +367,15 @@ RoutingEmbeddingService.embedBatch(texts, "bge-large-zh")
 ```
 业务代码: embeddingService.embed("测试文本")
     │
-    ├─ targets = [siliconflow-qwen3, aihubmix-bge, ollama-nomic]
+    ├─ targets = [qwen-emb, qwen-emb-local]
     │
-    ├─ 尝试 siliconflow-qwen3:
+    ├─ 尝试 qwen-emb (bailian):
     │   └─ HTTP 500 → markFailure → 尝试下一个
     │
-    ├─ 尝试 aihubmix-bge:
+    ├─ 尝试 qwen-emb-local (ollama):
     │   └─ HTTP 200 → markSuccess → return [...]
     │
-    └─ （ollama-nomic 不会被调用）
+    └─ （后续候选不会被调用）
 ```
 
 ---
@@ -390,8 +388,7 @@ RoutingEmbeddingService.embedBatch(texts, "bge-large-zh")
 | `RoutingEmbeddingService` | @Service @Primary | 路由实现：委托 ModelSelector + ModelRoutingExecutor 做故障转移 |
 | `EmbeddingClient` | 接口 | 厂商级接口：provider() + embed() + embedBatch() |
 | `AbstractOpenAIStyleEmbeddingClient` | 抽象类 | OpenAI 协议模板：doEmbed() + 分批逻辑 + 3 个钩子 |
-| `SiliconFlowEmbeddingClient` | @Service | 硅基流动实现，maxBatchSize=32 |
-| `AIHubMixEmbeddingClient` | @Service | AIHubMix 实现，maxBatchSize=32 |
+| `BaiLianEmbeddingClient` | @Service | 百炼实现，text-embedding-v4，maxBatchSize=10 |
 | `OllamaEmbeddingClient` | @Service | Ollama 本地推理，无 API Key，不限制批量，不加 encoding_format |
 
 ## 七、关键学习要点

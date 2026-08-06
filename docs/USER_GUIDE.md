@@ -274,7 +274,7 @@ bootstrap/src/main/resources/application.yaml
 
 ```powershell
 $env:BAILIAN_API_KEY="你的百炼 API Key"
-$env:SILICONFLOW_API_KEY="你的 SiliconFlow API Key"
+$env:DEEPSEEK_API_KEY="你的 DeepSeek API Key"
 ```
 
 用途：
@@ -282,8 +282,7 @@ $env:SILICONFLOW_API_KEY="你的 SiliconFlow API Key"
 | 环境变量                            | 默认用途                                  |
 | ----------------------------------- | ----------------------------------------- |
 | `BAILIAN_API_KEY`                   | Qwen 聊天、Qwen3 Rerank、Qwen-VL          |
-| `SILICONFLOW_API_KEY`               | 默认 Qwen3-Embedding-8B、GLM 深度思考候选 |
-| `AIHUBMIX_API_KEY`                  | GPT 聊天与备用 Embedding                  |
+| `DEEPSEEK_API_KEY`                  | DeepSeek 聊天与深度思考候选               |
 | `MINERU_API_KEY`                    | PDF、Word、PPT 等复杂文档解析             |
 | `YDC_API_KEY`                       | 可选 Web Search                           |
 | `OSS_ACCESS_KEY` / `OSS_SECRET_KEY` | 切换阿里云 OSS 时使用                     |
@@ -623,7 +622,7 @@ URL 来源可配置：
 开启“深度思考”后使用 `deep` 模型档位。默认候选为：
 
 - 百炼 `qwen3-max`
-- SiliconFlow `GLM-4.7`
+- DeepSeek `deepseek-reasoner`
 
 深度思考超时配置为 120 秒，比普通问答更耗时和费用。
 
@@ -791,7 +790,7 @@ Invoke-RestMethod `
 ```powershell
 $kbBody = @{
   name = "IT 支持知识库"
-  embeddingModel = "qwen-emb-8b"
+  embeddingModel = "qwen-emb"
   collectionName = "it_support"
 } | ConvertTo-Json
 

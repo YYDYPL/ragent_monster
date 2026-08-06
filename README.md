@@ -21,7 +21,7 @@ Ragent Monster 是一个面向 Java 生态的企业级 Agentic RAG 平台，覆�
 | 向量检索      | 默认使用 PostgreSQL + pgvector 0.8.2 和 HNSW 索引，也可切换到 Milvus       |
 | 多路召回      | 向量、关键词、图谱、Web Search 通道可组合，通过 RRF 融合与 Rerank 收敛结果 |
 | 意图路由      | 使用意图树识别知识库范围，低置信度时自动回退到全局检索                     |
-| 模型路由      | 支持百炼、SiliconFlow、AIHubMix、Ollama，并提供故障熔断与候选模型降级      |
+| 模型路由      | 支持百炼（千问）、DeepSeek、本地 Ollama，并提供故障熔断与候选模型降级 |
 | Agentic / MCP | 自动发现 MCP Server 工具，内置销售、工单和天气示例工具                     |
 | 流式问答      | 基于 SSE 输出回答、排队状态、引用来源和推荐问题，支持主动停止任务          |
 | 会话记忆      | 保存历史消息，自动摘要长会话并生成会话标题                                 |
@@ -141,7 +141,7 @@ docker exec rocketmq-learning-broker sh /home/rocketmq/rocketmq-5.5.0/bin/mqadmi
 
 ```powershell
 $env:BAILIAN_API_KEY="你的百炼 API Key"
-$env:SILICONFLOW_API_KEY="你的 SiliconFlow API Key"
+$env:DEEPSEEK_API_KEY="你的 DeepSeek API Key"
 ```
 
 也可以运行 Ollama，并准备 `qwen3:8b-fp16` 与 `qwen3-embedding:8b-fp16`。外部密钥均通过环境变量读取，不要直接提交到 `application.yaml`。

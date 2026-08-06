@@ -12,7 +12,7 @@ KV / 向量 / 文档状态**复用宿主机已有的 PostgreSQL**（后端同一
 ## 前置条件
 
 - 宿主机 PostgreSQL 可访问，且已安装 `pgvector`（与后端共用，库名默认 `ragent`）
-- 已准备百炼与 SiliconFlow API Key
+- 已准备百炼 API Key
 - 已安装 Docker / Docker Compose
 
 Compose 从同目录 `.env` 读取本地参数；仓库只提交 `.env.example`，实际 `.env` 已加入 `.gitignore`。默认 PostgreSQL 配置与项目 `application.yaml` 一致：`postgres/postgres`、数据库 `ragent`。
@@ -22,7 +22,7 @@ Compose 从同目录 `.env` 读取本地参数；仓库只提交 `.env.example`�
 ```bash
 cd resources/docker/graphrag
 cp .env.example .env
-# 编辑 .env，填写 BAILIAN_API_KEY 与 SILICONFLOW_API_KEY
+# 编辑 .env，填写 BAILIAN_API_KEY
 docker compose -f lightrag-neo4j-stack.compose.yaml up -d
 ```
 
@@ -59,7 +59,7 @@ rag:
       base-url: http://127.0.0.1:9621     # 本机默认；后端与本栈不同机时改为对应地址
       query-mode: mix                     # naive / local / global / hybrid / mix
       timeout-ms: 30000
-    embedding-model: qwen-emb-8b          # 与 Compose 的 SiliconFlow Embedding 配置一致
+    embedding-model: text-embedding-v4    # 与 Compose 的百炼 Embedding 配置一致
     ingestion:
       async: true
       global-workspace: false
@@ -77,7 +77,7 @@ rag:
 
 ## 注意事项
 
-- 后端 `rag.default.dimension` 与 Compose 的 `EMBEDDING_DIM` 当前均为 `1536`；`EMBEDDING_SEND_DIM=true` 会要求 SiliconFlow 返回相同维度
+- 后端 `rag.default.dimension` 与 Compose 的 `EMBEDDING_DIM` 当前均为 `1536`；`EMBEDDING_SEND_DIM=true` 会要求百炼返回相同维度
 - **Embedding 模型或维度首次索引后不可更换**。修改前需清空 LightRAG 存储（PG 中 `LIGHTRAG_*` 表 + Neo4j 数据）再重新索引
 - Compose 中的账号密码只面向本机开发，请勿把当前端口和固定密码直接用于生产或暴露到公网
 - **镜像 tag 建议 pin 到已验证的具体版本**，勿长期用 `latest`（社区仓库历史上出现过超前日期版本 / 虚构模型名）

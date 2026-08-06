@@ -55,7 +55,7 @@ npm run dev
 - 点击"新建知识库"
 - 填写表单：
   - 名称：测试知识库
-  - Embedding模型：qwen-emb-8b
+  - Embedding模型：qwen-emb
   - Collection名称：test_kb
 - 点击创建
 

@@ -21,20 +21,31 @@ import com.hjs.study.ragent.infra.enums.ModelProvider;
 import okhttp3.OkHttpClient;
 import org.springframework.stereotype.Service;
 
+/**
+* 阿里云百炼（BaiLian）Embedding 客户端
+* <p>
+* 百炼 OpenAI 兼容接口的 text-embedding-v4 支持 1536 维输出，
+* 与数据库默认向量维度一致，无需迁移存量向量数据。
+*
+* @see AbstractOpenAIStyleEmbeddingClient 父类提供 OpenAI 协议通用逻辑
+*/
 @Service
-public class AIHubMixEmbeddingClient extends AbstractOpenAIStyleEmbeddingClient {
+public class BaiLianEmbeddingClient extends AbstractOpenAIStyleEmbeddingClient {
 
-    public AIHubMixEmbeddingClient(OkHttpClient syncHttpClient) {
-        super(syncHttpClient);
-    }
+   public BaiLianEmbeddingClient(OkHttpClient syncHttpClient) {
+       super(syncHttpClient);
+   }
 
-    @Override
-    public String provider() {
-        return ModelProvider.AI_HUB_MIX.getId();
-    }
+   @Override
+   public String provider() {
+       return ModelProvider.BAI_LIAN.getId();
+   }
 
-    @Override
-    protected int maxBatchSize() {
-        return 32;
-    }
+   /**
+    * 百炼 text-embedding-v4 单次请求最多 10 条文本，超出由父类自动分批
+    */
+   @Override
+   protected int maxBatchSize() {
+       return 10;
+   }
 }

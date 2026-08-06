@@ -39,14 +39,9 @@ public enum ModelProvider {
     BAI_LIAN("bailian"),
 
     /**
-     * 硅基流动 AI 模型服务
+     * DeepSeek（深度求索）开放平台
      */
-    SILICON_FLOW("siliconflow"),
-
-    /**
-     * 推理时代 AI 模型服务
-     */
-    AI_HUB_MIX("aihubmix"),
+    DEEPSEEK("deepseek"),
 
     /**
      * 空实现，用于测试或占位

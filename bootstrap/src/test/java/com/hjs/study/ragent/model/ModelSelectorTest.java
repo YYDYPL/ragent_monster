@@ -73,7 +73,7 @@ class ModelSelectorTest {
         AIModelProperties props = new AIModelProperties();
 
         Map<String, AIModelProperties.ProviderConfig> providers = new HashMap<>();
-        for (String p : List.of("bailian", "ollama", "siliconflow", "aihubmix")) {
+        for (String p : List.of("bailian", "ollama", "deepseek")) {
             providers.put(p, new AIModelProperties.ProviderConfig());
         }
         props.setProviders(providers);
@@ -82,15 +82,15 @@ class ModelSelectorTest {
         chat.setCandidates(List.of(
                 cand("qwen-flash", "bailian", "qwen-flash", false),
                 cand("qwen-plus", "bailian", "qwen-plus-latest", false),
-                cand("qwen3-local", "ollama", "qwen3:8b", false),
                 cand("qwen3-max", "bailian", "qwen3-max", true),
-                cand("glm-4.7", "siliconflow", "GLM-4.7", true),
-                cand("gpt-5.4", "aihubmix", "gpt-5.4", false)
+                cand("deepseek-chat", "deepseek", "deepseek-chat", false),
+                cand("deepseek-reasoner", "deepseek", "deepseek-reasoner", true),
+                cand("qwen3-local", "ollama", "qwen3:8b", false)
         ));
         Map<String, AIModelProperties.TierConfig> tiers = new HashMap<>();
         tiers.put("fast", tier(List.of("qwen-flash", "qwen-plus", "qwen3-local"), 5000L));
-        tiers.put("standard", tier(List.of("qwen-plus", "qwen3-local", "gpt-5.4"), 30000L));
-        tiers.put("deep", tier(List.of("qwen3-max", "glm-4.7"), 120000L));
+        tiers.put("standard", tier(List.of("qwen-plus", "qwen3-local", "deepseek-chat"), 30000L));
+        tiers.put("deep", tier(List.of("qwen3-max", "deepseek-reasoner"), 120000L));
         chat.setTiers(tiers);
         chat.setDefaultTier("standard");
         chat.setDeepThinkingTier("deep");
@@ -102,14 +102,14 @@ class ModelSelectorTest {
     @Test
     void 默认档走_standard_且携带该档超时() {
         List<ModelTarget> targets = selector.selectChatCandidates(false);
-        assertEquals(List.of("qwen-plus", "qwen3-local", "gpt-5.4"), ids(targets));
+        assertEquals(List.of("qwen-plus", "qwen3-local", "deepseek-chat"), ids(targets));
         assertEquals(30000L, targets.get(0).timeoutMs());
     }
 
     @Test
     void 深度思考走_deep_且全部支持思考() {
         List<ModelTarget> targets = selector.selectChatCandidates(true);
-        assertEquals(List.of("qwen3-max", "glm-4.7"), ids(targets));
+        assertEquals(List.of("qwen3-max", "deepseek-reasoner"), ids(targets));
         assertEquals(120000L, targets.get(0).timeoutMs());
         assertTrue(targets.stream().allMatch(t -> Boolean.TRUE.equals(t.candidate().getSupportsThinking())));
     }
@@ -124,25 +124,25 @@ class ModelSelectorTest {
     @Test
     void thinking_覆盖档位覆盖() {
         List<ModelTarget> targets = selector.selectChatCandidates(true, Tier.FAST);
-        assertEquals(List.of("qwen3-max", "glm-4.7"), ids(targets));
+        assertEquals(List.of("qwen3-max", "deepseek-reasoner"), ids(targets));
     }
 
     @Test
     void preferred_置于队首并去重() {
-        List<ModelTarget> targets = selector.selectChatCandidates(false, Tier.STANDARD, "gpt-5.4");
-        assertEquals(List.of("gpt-5.4", "qwen-plus", "qwen3-local"), ids(targets));
+        List<ModelTarget> targets = selector.selectChatCandidates(false, Tier.STANDARD, "deepseek-chat");
+        assertEquals(List.of("deepseek-chat", "qwen-plus", "qwen3-local"), ids(targets));
     }
 
     @Test
     void preferred_未登记则忽略回退档位候选() {
         List<ModelTarget> targets = selector.selectChatCandidates(false, Tier.STANDARD, "not-exist");
-        assertEquals(List.of("qwen-plus", "qwen3-local", "gpt-5.4"), ids(targets));
+        assertEquals(List.of("qwen-plus", "qwen3-local", "deepseek-chat"), ids(targets));
     }
 
     @Test
     void 思考请求下不支持思考的_preferred_被丢弃() {
         List<ModelTarget> targets = selector.selectChatCandidates(true, null, "qwen-plus");
-        assertEquals(List.of("qwen3-max", "glm-4.7"), ids(targets));
+        assertEquals(List.of("qwen3-max", "deepseek-reasoner"), ids(targets));
     }
 
     @Test
@@ -159,6 +159,6 @@ class ModelSelectorTest {
     void 不健康模型被熔断过滤() {
         when(healthStore.isUnavailable("qwen-plus")).thenReturn(true);
         List<ModelTarget> targets = selector.selectChatCandidates(false);
-        assertEquals(List.of("qwen3-local", "gpt-5.4"), ids(targets));
+        assertEquals(List.of("qwen3-local", "deepseek-chat"), ids(targets));
     }
 }
