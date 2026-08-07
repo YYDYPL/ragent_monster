@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Database, FileBarChart, FolderOpen, Layers, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { FileBarChart, FolderOpen, Layers, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
@@ -33,6 +33,7 @@ import { deleteKnowledgeBase, getKnowledgeBasesPage, renameKnowledgeBase } from 
 import { CreateKnowledgeBaseDialog } from "@/components/admin/CreateKnowledgeBaseDialog";
 import { getErrorMessage } from "@/utils/error";
 import { cn } from "@/lib/utils";
+import { BrandMark } from "@/components/common/BrandMark";
 
 const PAGE_SIZE = 10;
 const STATS_PAGE_SIZE = 200;
@@ -272,7 +273,7 @@ export function KnowledgeListPage() {
 
       <div className="admin-stat-grid">
         {[
-          { label: "知识库", value: stats.totalCount, icon: Database, scope: "全部" },
+          { label: "知识库", value: stats.totalCount, icon: BrandMark, scope: "全部" },
           { label: "文档数", value: stats.documentCount, icon: FileBarChart, scope: "全部" },
           { label: "含文档知识库", value: stats.activeCount, icon: FolderOpen, scope: "全部" },
           { label: "创建用户数", value: stats.creatorCount, icon: Layers, scope: "全部" }

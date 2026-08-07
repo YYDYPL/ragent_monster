@@ -1,80 +1,74 @@
-import * as React from "react";
-import { Github, Menu } from "lucide-react";
+import { Database, Menu, MessageSquare, PanelRight, Workflow } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { useChatStore } from "@/stores/chatStore";
+import { BrandMark } from "@/components/common/BrandMark";
+import { UserAvatar } from "@/components/common/UserAvatar";
+import { cn } from "@/lib/utils";
+import { useAuthStore } from "@/stores/authStore";
 
 interface HeaderProps {
   onToggleSidebar: () => void;
+  onToggleContext: () => void;
 }
 
-export function Header({ onToggleSidebar }: HeaderProps) {
-  const { currentSessionId, sessions } = useChatStore();
-  const [starCount, setStarCount] = React.useState<number | null>(null);
-  const currentSession = React.useMemo(
-    () => sessions.find((session) => session.id === currentSessionId),
-    [sessions, currentSessionId]
-  );
+export function Header({ onToggleSidebar, onToggleContext }: HeaderProps) {
+  const user = useAuthStore((state) => state.user);
+  const isAdmin = user?.role === "admin";
 
-  React.useEffect(() => {
-    let active = true;
-    fetch("https://api.github.com/repos/nageoffer/ragent")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!active) return;
-        const count = typeof data?.stargazers_count === "number" ? data.stargazers_count : null;
-        setStarCount(count);
-      })
-      .catch(() => {
-        if (active) {
-          setStarCount(null);
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const starLabel = React.useMemo(() => {
-    if (starCount === null) return "--";
-    if (starCount < 1000) return String(starCount);
-    const rounded = Math.round((starCount / 1000) * 10) / 10;
-    const text = String(rounded).replace(/\.0$/, "");
-    return `${text}k`;
-  }, [starCount]);
+  const openAdminPage = (path: string) => {
+    window.open(path, "_blank", "noopener,noreferrer");
+  };
 
   return (
-    <header className="sticky top-0 z-20 bg-white">
-      <div className="flex h-16 items-center justify-between px-6">
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onToggleSidebar}
-            aria-label="切换侧边栏"
-            className="text-gray-500 hover:bg-gray-100 lg:hidden"
-          >
-            <Menu className="h-5 w-5" />
-          </Button>
-          <p className="text-base font-medium text-gray-900">
-            {currentSession?.title || "新对话"}
-          </p>
+    <header className="chat-workspace-topbar">
+      <div className="chat-workspace-brand">
+        <button
+          type="button"
+          className="chat-workspace-icon-button chat-workspace-mobile-menu"
+          onClick={onToggleSidebar}
+          aria-label="打开会话导航"
+        >
+          <Menu className="h-[18px] w-[18px]" />
+        </button>
+        <BrandMark className="h-9 w-9" />
+        <div className="min-w-0">
+          <strong>NexusRAG</strong>
+          <span>企业知识工作台</span>
         </div>
-        <div className="flex items-center gap-2">
-          <a
-            href="https://github.com/nageoffer/ragent"
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-1.5 text-sm text-gray-600 transition hover:bg-gray-100 hover:text-gray-900"
-            aria-label="打开 GitHub 仓库"
-          >
-            <Github className="h-4 w-4" />
-            <span className="font-medium">Star</span>
-            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
-              {starLabel}
-            </span>
-          </a>
-        </div>
+      </div>
+
+      <nav className="chat-workspace-product-nav" aria-label="产品导航">
+        <button type="button" className="is-active">
+          <MessageSquare className="h-4 w-4" />
+          智能问答
+        </button>
+        {isAdmin ? (
+          <>
+            <button type="button" onClick={() => openAdminPage("/admin/knowledge")}>
+              <Database className="h-4 w-4" />
+              知识库
+            </button>
+            <button type="button" onClick={() => openAdminPage("/admin/ingestion")}>
+              <Workflow className="h-4 w-4" />
+              数据通道
+            </button>
+          </>
+        ) : null}
+      </nav>
+
+      <div className="chat-workspace-topbar-actions">
+        <button
+          type="button"
+          className={cn("chat-workspace-icon-button", "chat-workspace-context-trigger")}
+          onClick={onToggleContext}
+          aria-label="打开知识上下文"
+          title="知识上下文"
+        >
+          <PanelRight className="h-[18px] w-[18px]" />
+        </button>
+        <UserAvatar
+          user={user}
+          className="h-8 w-8 border-[#d9e0e9] bg-[#e9effc] text-[#2858c4]"
+        />
       </div>
     </header>
   );

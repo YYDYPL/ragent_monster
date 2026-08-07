@@ -3,7 +3,6 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import { ChatInput } from "@/components/chat/ChatInput";
 import { MessageList } from "@/components/chat/MessageList";
-import { SourcesPanel } from "@/components/chat/SourcesPanel";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useChatStore } from "@/stores/chatStore";
 
@@ -81,25 +80,34 @@ export function ChatPage() {
 
   return (
     <MainLayout>
-      <div className="flex h-full">
-        <div className="flex h-full min-w-0 flex-1 flex-col bg-white">
-          <div className="flex-1 min-h-0">
-            <MessageList
-              messages={messages}
-              isLoading={isLoading}
-              isStreaming={isStreaming}
-              sessionKey={currentSessionId}
-            />
+      <div className="chat-workspace-chat">
+        <header className="chat-workspace-thread-header">
+          <div className="min-w-0">
+            <strong title={sessions.find((session) => session.id === currentSessionId)?.title || "新对话"}>
+              {sessions.find((session) => session.id === currentSessionId)?.title || "新对话"}
+            </strong>
+            <span>NexusRAG · 企业知识助手</span>
           </div>
-          {showWelcome ? null : (
-            <div className="relative z-20 bg-white">
-              <div className="mx-auto max-w-[840px] px-6 pt-1 pb-4">
-                <ChatInput />
-              </div>
-            </div>
-          )}
+          <div className="chat-workspace-connection-status">
+            <i aria-hidden="true" />
+            知识检索已连接
+          </div>
+        </header>
+        <div className="min-h-0 flex-1">
+          <MessageList
+            messages={messages}
+            isLoading={isLoading}
+            isStreaming={isStreaming}
+            sessionKey={currentSessionId}
+          />
         </div>
-        <SourcesPanel />
+        {showWelcome ? null : (
+          <div className="chat-workspace-composer-wrap">
+            <div className="mx-auto w-full max-w-[880px] px-5 pb-4 pt-2 sm:px-8">
+              <ChatInput />
+            </div>
+          </div>
+        )}
       </div>
     </MainLayout>
   );

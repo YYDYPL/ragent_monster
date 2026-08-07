@@ -1,21 +1,26 @@
 import * as React from "react";
-import { X } from "lucide-react";
+import { ArrowLeft, ExternalLink, X } from "lucide-react";
 
+import { BrandMark } from "@/components/common/BrandMark";
 import { fileExt, isExternal, SourceIcon, sourceLabel } from "@/components/chat/SourceIcon";
 import { cn } from "@/lib/utils";
+import { useAuthStore } from "@/stores/authStore";
 import { useChatStore } from "@/stores/chatStore";
 import type { SourceRef } from "@/types";
+
+interface SourcesPanelProps {
+  mobileOpen: boolean;
+  onMobileOpenChange: (open: boolean) => void;
+}
 
 function openSource(source: SourceRef) {
   if (isExternal(source) && source.url) {
     window.open(source.url, "_blank", "noopener,noreferrer");
     return;
   }
-  // 本地文件：新标签页打开预览 预览页按 docId 自取元数据与原文件
   window.open(`/preview/doc/${source.docId}`, "_blank", "noopener,noreferrer");
 }
 
-// 元信息文案：本地文件补上扩展名（本地文件 · xlsx），网页/飞书用域名或类型
 function metaLabel(source: SourceRef) {
   const base = sourceLabel(source);
   if (!isExternal(source)) {
@@ -25,97 +30,158 @@ function metaLabel(source: SourceRef) {
   return base;
 }
 
-/**
- * 参考来源面板：作为 flex 兄弟项从右侧推挤入场（非模态 不压暗主页）
- * 打开状态由 chatStore.openedSourceMessageId 驱动 关闭时保留内容随宽度收起
- */
-export function SourcesPanel() {
+function sourceKey(source: SourceRef) {
+  return `${source.docId || "external"}:${source.url || ""}`;
+}
+
+export function SourcesPanel({ mobileOpen, onMobileOpenChange }: SourcesPanelProps) {
   const openedSourceMessageId = useChatStore((state) => state.openedSourceMessageId);
   const messages = useChatStore((state) => state.messages);
   const closeSourcesPanel = useChatStore((state) => state.closeSourcesPanel);
+  const user = useAuthStore((state) => state.user);
 
-  const open = openedSourceMessageId != null;
-  // 来源以 messages 为唯一数据源 按打开的消息 ID 派生 不再单独存一份副本
-  const sources =
-    messages.find((message) => message.id === openedSourceMessageId)?.sources ?? [];
+  const selectedSources = React.useMemo(
+    () => messages.find((message) => message.id === openedSourceMessageId)?.sources ?? [],
+    [messages, openedSourceMessageId]
+  );
+  const allSources = React.useMemo(() => {
+    const unique = new Map<string, SourceRef>();
+    messages.forEach((message) => {
+      message.sources?.forEach((source) => {
+        const key = sourceKey(source);
+        if (!unique.has(key)) unique.set(key, source);
+      });
+    });
+    return Array.from(unique.values());
+  }, [messages]);
 
-  // 收起动画期间保留上一次内容 避免瞬间清空闪烁
-  const lastSourcesRef = React.useRef(sources);
-  if (open && sources.length > 0) {
-    lastSourcesRef.current = sources;
-  }
-  const shownSources = open ? sources : lastSourcesRef.current;
+  const showingCurrent = openedSourceMessageId != null;
+  const shownSources = showingCurrent ? selectedSources : allSources;
+  const overlayOpen = mobileOpen || showingCurrent;
 
-  // 面板打开时按 Esc 关闭
+  const closeOverlay = React.useCallback(() => {
+    closeSourcesPanel();
+    onMobileOpenChange(false);
+  }, [closeSourcesPanel, onMobileOpenChange]);
+
   React.useEffect(() => {
-    if (!open) return;
+    if (!overlayOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        closeSourcesPanel();
-      }
+      if (event.key === "Escape") closeOverlay();
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, closeSourcesPanel]);
+  }, [overlayOpen, closeOverlay]);
 
   return (
-    <aside
-      className={cn(
-        "h-full shrink-0 overflow-hidden transition-[width] duration-300 ease-out",
-        open ? "w-[380px] border-l border-[#EFEFEF]" : "w-0"
-      )}
-      aria-hidden={!open}
-    >
-      <div className="flex h-full w-[380px] flex-col bg-white">
-        <div className="flex items-center justify-between border-b border-[#F0F0F0] px-5 py-4">
-          <span className="text-[15px] font-semibold text-[#1A1A1A]">参考来源 ({shownSources.length})</span>
+    <>
+      <button
+        type="button"
+        className={cn("chat-workspace-context-overlay", overlayOpen && "is-open")}
+        onClick={closeOverlay}
+        aria-label="关闭知识上下文"
+      />
+      <aside className={cn("chat-workspace-context-panel", overlayOpen && "is-open")}>
+        <div className="chat-workspace-context-tabs">
           <button
             type="button"
+            className={cn(!showingCurrent && "is-active")}
             onClick={closeSourcesPanel}
-            className="rounded-full p-1.5 text-[#999999] transition-colors hover:bg-[#F5F5F5] hover:text-[#666666]"
-            aria-label="关闭"
+          >
+            上下文
+          </button>
+          <button
+            type="button"
+            className={cn(showingCurrent && "is-active")}
+            disabled={!showingCurrent}
+          >
+            当前来源
+          </button>
+          <button
+            type="button"
+            className="chat-workspace-context-close"
+            onClick={closeOverlay}
+            aria-label="关闭知识上下文"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-3 py-3 sidebar-scroll">
-          <ul className="space-y-1">
-            {shownSources.map((source, idx) => (
-              <li key={`${source.docId}-${idx}`}>
-                <button
-                  type="button"
-                  onClick={() => openSource(source)}
-                  title={source.docName || "查看来源"}
-                  className="w-full rounded-xl p-3 text-left transition-all hover:bg-white hover:shadow-[0_2px_12px_rgba(0,0,0,0.06)]"
-                >
-                  <div className="flex items-start gap-2.5">
-                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-[#EDEDED] text-[11px] font-medium text-[#666666]">
-                      {source.index ?? idx + 1}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium text-[#1A1A1A]">
-                        {source.docName || "未命名文档"}
-                      </div>
-                      <div className="mt-1 flex items-center gap-1.5 text-xs text-[#9AA0A6]">
-                        <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
-                          <SourceIcon source={source} className="h-3.5 w-3.5" />
-                        </span>
-                        <span className="truncate">{metaLabel(source)}</span>
-                      </div>
-                      {source.excerpt ? (
-                        <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-[#8A8F94]">
-                          {source.excerpt}
-                        </p>
-                      ) : null}
-                    </div>
-                  </div>
-                </button>
-              </li>
-            ))}
-          </ul>
+        <div className="chat-workspace-context-scroll sidebar-scroll">
+          <section className="chat-workspace-context-summary">
+            <div className="chat-workspace-context-brand-icon">
+              <BrandMark className="h-10 w-10" />
+            </div>
+            <div>
+              <strong>{showingCurrent ? "回答引用" : "会话知识上下文"}</strong>
+              <span>{shownSources.length} 个关联文档</span>
+            </div>
+          </section>
+
+          {showingCurrent ? (
+            <button
+              type="button"
+              className="chat-workspace-context-back"
+              onClick={closeSourcesPanel}
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              返回会话上下文
+            </button>
+          ) : null}
+
+          <section className="chat-workspace-context-section">
+            <div className="chat-workspace-context-title">
+              <strong>{showingCurrent ? "引用文档" : "已使用的知识"}</strong>
+              <span>{shownSources.length}</span>
+            </div>
+
+            {shownSources.length === 0 ? (
+              <div className="chat-workspace-context-empty">
+                <BrandMark className="h-12 w-12 opacity-40" />
+                <p>当前会话暂无引用来源</p>
+              </div>
+            ) : (
+              <ul className="chat-workspace-source-list">
+                {shownSources.map((source, index) => (
+                  <li key={`${sourceKey(source)}:${index}`}>
+                    <button type="button" onClick={() => openSource(source)} title={source.docName}>
+                      <span className="chat-workspace-source-icon">
+                        <SourceIcon source={source} className="h-4 w-4" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <strong>{source.docName || "未命名文档"}</strong>
+                        <small>{metaLabel(source)}</small>
+                        {source.excerpt ? <p>{source.excerpt}</p> : null}
+                      </span>
+                      <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {user?.role === "admin" ? (
+            <section className="chat-workspace-context-section">
+              <div className="chat-workspace-context-title">
+                <strong>知识库</strong>
+              </div>
+              <button
+                type="button"
+                className="chat-workspace-manage-kb"
+                onClick={() => window.open("/admin/knowledge", "_blank", "noopener,noreferrer")}
+              >
+                <BrandMark className="h-8 w-8" />
+                <span>
+                  <strong>NexusRAG 知识库</strong>
+                  <small>管理文档与检索内容</small>
+                </span>
+                <ExternalLink className="h-4 w-4" />
+              </button>
+            </section>
+          ) : null}
         </div>
-      </div>
-    </aside>
+      </aside>
+    </>
   );
 }

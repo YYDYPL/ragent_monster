@@ -1,5 +1,6 @@
 import * as React from "react";
 
+import { SourcesPanel } from "@/components/chat/SourcesPanel";
 import { Header } from "@/components/layout/Header";
 import { Sidebar } from "@/components/layout/Sidebar";
 
@@ -9,16 +10,17 @@ interface MainLayoutProps {
 
 export function MainLayout({ children }: MainLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
+  const [contextOpen, setContextOpen] = React.useState(false);
 
   return (
-    <div className="flex min-h-screen bg-[#FAFAFA]">
+    <div className="chat-workspace-shell">
+      <Header
+        onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
+        onToggleContext={() => setContextOpen((prev) => !prev)}
+      />
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <div className="flex min-h-screen flex-1 flex-col bg-white">
-        <Header onToggleSidebar={() => setSidebarOpen((prev) => !prev)} />
-        <main className="flex-1 min-h-0 overflow-hidden bg-white">
-          {children}
-        </main>
-      </div>
+      <main className="chat-workspace-main">{children}</main>
+      <SourcesPanel mobileOpen={contextOpen} onMobileOpenChange={setContextOpen} />
     </div>
   );
 }

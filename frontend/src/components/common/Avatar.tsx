@@ -20,14 +20,16 @@ export function Avatar({ name, src, className }: AvatarProps) {
   return (
     <AvatarPrimitive.Root
       className={cn(
-        "inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-muted text-xs font-semibold text-muted-foreground",
+        "relative inline-flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-muted text-xs font-semibold text-muted-foreground",
         className
       )}
     >
       {src ? (
-        <AvatarPrimitive.Image src={src} alt={name} className="h-full w-full rounded-full" />
+        <AvatarPrimitive.Image src={src} alt={name} className="block h-full w-full object-cover" />
       ) : null}
-      <AvatarPrimitive.Fallback className="select-none">{fallback}</AvatarPrimitive.Fallback>
+      <AvatarPrimitive.Fallback className="flex h-full w-full select-none items-center justify-center">
+        {fallback}
+      </AvatarPrimitive.Fallback>
     </AvatarPrimitive.Root>
   );
 }
