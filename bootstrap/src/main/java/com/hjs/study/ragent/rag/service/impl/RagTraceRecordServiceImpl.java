@@ -72,4 +72,12 @@ public class RagTraceRecordServiceImpl implements RagTraceRecordService {
                 .eq(RagTraceNodeDO::getTraceId, traceId)
                 .eq(RagTraceNodeDO::getNodeId, nodeId));
     }
+
+    @Override
+    public void updateNodeExtra(String traceId, String nodeId, String extraData) {
+        nodeMapper.update(null, Wrappers.lambdaUpdate(RagTraceNodeDO.class)
+                .eq(RagTraceNodeDO::getTraceId, traceId)
+                .eq(RagTraceNodeDO::getNodeId, nodeId)
+                .set(RagTraceNodeDO::getExtraData, extraData));
+    }
 }

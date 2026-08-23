@@ -185,6 +185,7 @@ CREATE TABLE t_knowledge_document (
     doc_name         VARCHAR(256)  NOT NULL,
     enabled          SMALLINT      NOT NULL DEFAULT 1,
     chunk_count      INTEGER       DEFAULT 0,
+    content_version  BIGINT        NOT NULL DEFAULT 0,
     file_url         VARCHAR(1024) NOT NULL,
     file_type        VARCHAR(16)   NOT NULL,
     file_size        BIGINT,
@@ -224,6 +225,106 @@ CREATE TABLE t_knowledge_chunk (
 );
 CREATE INDEX idx_doc_id ON t_knowledge_chunk (doc_id);
 COMMENT ON TABLE t_knowledge_chunk IS '知识库文档分块表';
+
+CREATE TABLE t_rag_projection_state (
+    id                   VARCHAR(20)  NOT NULL PRIMARY KEY,
+    target               VARCHAR(24)  NOT NULL,
+    scope_type           VARCHAR(24)  NOT NULL,
+    entity_id            VARCHAR(64)  NOT NULL,
+    kb_id                VARCHAR(20)  NOT NULL,
+    collection_name      VARCHAR(64),
+    doc_id               VARCHAR(20),
+    desired_version      BIGINT       NOT NULL DEFAULT 0,
+    applied_version      BIGINT       NOT NULL DEFAULT -1,
+    action               VARCHAR(16)  NOT NULL,
+    status               VARCHAR(20)  NOT NULL,
+    phase                VARCHAR(32),
+    attempt_count        INTEGER      NOT NULL DEFAULT 0,
+    next_retry_time      TIMESTAMP,
+    lease_owner          VARCHAR(128),
+    lease_until          TIMESTAMP,
+    last_error           TEXT,
+    external_track_id    VARCHAR(128),
+    external_track_version BIGINT,
+    external_document_id VARCHAR(128),
+    config_fingerprint   VARCHAR(128),
+    desired_time         TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    started_at           TIMESTAMP,
+    completed_at         TIMESTAMP,
+    create_time          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_projection_entity UNIQUE (target, scope_type, entity_id),
+    CONSTRAINT ck_projection_status CHECK (status IN
+        ('PENDING', 'RUNNING', 'WAIT_EXTERNAL', 'RETRY_WAIT', 'SUCCEEDED', 'BLOCKED')),
+    CONSTRAINT ck_projection_action CHECK (action IN ('UPSERT', 'DELETE', 'PURGE_KB'))
+);
+CREATE INDEX idx_projection_due ON t_rag_projection_state
+    (target, status, next_retry_time, desired_time);
+CREATE INDEX idx_projection_kb_doc ON t_rag_projection_state (kb_id, doc_id);
+CREATE INDEX idx_projection_lease ON t_rag_projection_state (lease_until)
+    WHERE status IN ('RUNNING', 'WAIT_EXTERNAL');
+COMMENT ON TABLE t_rag_projection_state IS 'ES/LightRAG 可重建异步投影期望状态';
+
+CREATE TABLE t_rag_projection_attempt (
+    id              VARCHAR(20) NOT NULL PRIMARY KEY,
+    projection_id   VARCHAR(20) NOT NULL,
+    target          VARCHAR(24) NOT NULL,
+    desired_version BIGINT      NOT NULL,
+    attempt_no      INTEGER     NOT NULL,
+    result          VARCHAR(20) NOT NULL,
+    phase           VARCHAR(32),
+    error_summary   TEXT,
+    started_at      TIMESTAMP   NOT NULL,
+    finished_at     TIMESTAMP,
+    duration_ms     BIGINT,
+    create_time     TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_projection_attempt_state ON t_rag_projection_attempt (projection_id, create_time DESC);
+CREATE INDEX idx_projection_attempt_retention ON t_rag_projection_attempt (create_time);
+COMMENT ON TABLE t_rag_projection_attempt IS '投影每次执行的审计记录，默认保留90天';
+
+CREATE TABLE t_rag_projection_batch (
+    id            VARCHAR(20) NOT NULL PRIMARY KEY,
+    batch_type    VARCHAR(20) NOT NULL,
+    target        VARCHAR(64),
+    kb_id         VARCHAR(20),
+    doc_id        VARCHAR(20),
+    status        VARCHAR(20) NOT NULL,
+    total_count   INTEGER     NOT NULL DEFAULT 0,
+    success_count INTEGER     NOT NULL DEFAULT 0,
+    failed_count  INTEGER     NOT NULL DEFAULT 0,
+    pending_count INTEGER     NOT NULL DEFAULT 0,
+    requested_by  VARCHAR(64),
+    last_error    TEXT,
+    started_at    TIMESTAMP,
+    completed_at  TIMESTAMP,
+    create_time   TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time   TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_projection_batch_status ON t_rag_projection_batch (status, create_time DESC);
+COMMENT ON TABLE t_rag_projection_batch IS '投影全量重建及对账批任务，默认保留180天';
+
+CREATE TABLE t_graph_workspace_binding (
+    id                   VARCHAR(20)  NOT NULL PRIMARY KEY,
+    kb_id                VARCHAR(20)  NOT NULL,
+    workspace_key        VARCHAR(64)  NOT NULL,
+    enabled              SMALLINT     NOT NULL DEFAULT 0,
+    health_status        VARCHAR(20)  NOT NULL DEFAULT 'DISABLED',
+    lightrag_version     VARCHAR(64),
+    api_version          VARCHAR(64),
+    config_fingerprint   VARCHAR(128),
+    last_health_time     TIMESTAMP,
+    last_error           TEXT,
+    lease_owner          VARCHAR(128),
+    lease_until          TIMESTAMP,
+    create_time          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_graph_workspace_kb UNIQUE (kb_id),
+    CONSTRAINT uk_graph_workspace_key UNIQUE (workspace_key)
+);
+CREATE INDEX idx_graph_workspace_health ON t_graph_workspace_binding (enabled, health_status);
+CREATE INDEX idx_graph_workspace_lease ON t_graph_workspace_binding (lease_until);
+COMMENT ON TABLE t_graph_workspace_binding IS '知识库与确定性LightRAG workspace绑定，不保存URL或密钥';
 
 CREATE TABLE t_knowledge_document_chunk_log (
     id                 VARCHAR(20)      NOT NULL PRIMARY KEY,

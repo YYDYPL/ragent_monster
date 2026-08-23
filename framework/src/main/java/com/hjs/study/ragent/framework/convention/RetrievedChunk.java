@@ -58,6 +58,12 @@ public class RetrievedChunk {
      */
     private String docId;
 
+    /** 来源知识库 ID，派生检索通道的新鲜度校验必填。 */
+    private String kbId;
+
+    /** 命中投影携带的文档内容版本。 */
+    private Long contentVersion;
+
     /**
      * 分块在所属文档中的序号 从 0 开始
      * 检索后由元数据富化补齐 未富化时为 null

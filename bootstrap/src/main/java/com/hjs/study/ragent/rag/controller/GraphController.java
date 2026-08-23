@@ -17,6 +17,7 @@
 
 package com.hjs.study.ragent.rag.controller;
 
+import cn.dev33.satoken.stp.StpUtil;
 import com.hjs.study.ragent.framework.convention.Result;
 import com.hjs.study.ragent.framework.web.Results;
 import com.hjs.study.ragent.rag.controller.vo.GraphViewVO;
@@ -52,20 +53,23 @@ public class GraphController {
      * @param limit      节点上限，默认 200
      */
     @GetMapping("/graph")
-    public Result<GraphViewVO> graph(@RequestParam(required = false) String entity,
-                                     @RequestParam(required = false) String collection,
+    public Result<GraphViewVO> graph(@RequestParam String kbId,
+                                     @RequestParam(required = false) String entity,
                                      @RequestParam(required = false) String doc,
                                      @RequestParam(defaultValue = "2") int depth,
                                      @RequestParam(defaultValue = "200") int limit) {
-        return Results.success(graphQueryService.getGraph(entity, collection, doc, depth, limit));
+        StpUtil.checkRole("admin");
+        return Results.success(graphQueryService.getGraph(kbId, entity, doc, depth, limit));
     }
 
     /**
      * 检索实体标签，供可视化搜索框；keyword 为空取热门标签
      */
     @GetMapping("/labels")
-    public Result<List<String>> labels(@RequestParam(required = false) String keyword,
+    public Result<List<String>> labels(@RequestParam String kbId,
+                                       @RequestParam(required = false) String keyword,
                                        @RequestParam(defaultValue = "50") int limit) {
-        return Results.success(graphQueryService.searchEntities(keyword, limit));
+        StpUtil.checkRole("admin");
+        return Results.success(graphQueryService.searchEntities(kbId, keyword, limit));
     }
 }

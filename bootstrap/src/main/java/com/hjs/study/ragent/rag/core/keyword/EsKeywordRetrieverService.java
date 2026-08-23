@@ -25,6 +25,8 @@ import co.elastic.clients.elasticsearch.core.search.Hit;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.hjs.study.ragent.framework.convention.RetrievedChunk;
 import com.hjs.study.ragent.rag.config.KeywordProperties;
+import com.hjs.study.ragent.rag.projection.model.ProjectionTarget;
+import com.hjs.study.ragent.rag.projection.service.ProjectionFreshnessGate;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
@@ -32,7 +34,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 基于 Elasticsearch 的关键词检索服务
@@ -51,18 +56,29 @@ public class EsKeywordRetrieverService implements KeywordRetrieverService {
 
     private final ElasticsearchClient esClient;
     private final KeywordProperties keywordProperties;
+    private final KeywordBackendHealth backendHealth;
+    private final ProjectionFreshnessGate freshnessGate;
 
     @Override
     public List<RetrievedChunk> search(String query, List<String> collectionNames, int topK) {
+        if (!backendHealth.isHealthy() || topK <= 0) {
+            return List.of();
+        }
         String index = keywordProperties.sharedIndex();
         List<FieldValue> collectionFilter = CollUtil.isEmpty(collectionNames)
                 ? List.of()
                 : collectionNames.stream().map(FieldValue::of).toList();
 
         try {
-            SearchResponse<KeywordHitDocument> resp = esClient.search(s -> s
+            int pageSize = Math.max(topK, topK * 5);
+            List<RetrievedChunk> accepted = new ArrayList<>(topK);
+            Set<String> acceptedIds = new LinkedHashSet<>();
+            for (int page = 0; page < 3 && accepted.size() < topK; page++) {
+                int from = page * pageSize;
+                SearchResponse<KeywordHitDocument> resp = esClient.search(s -> s
                             .index(index)
-                            .size(topK)
+                            .from(from)
+                            .size(pageSize)
                             .ignoreUnavailable(true)
                             .allowNoIndices(true)
                             .query(q -> q.bool(b -> {
@@ -79,16 +95,27 @@ public class EsKeywordRetrieverService implements KeywordRetrieverService {
                             })),
                     KeywordHitDocument.class);
 
-            List<Hit<KeywordHitDocument>> hits = resp.hits().hits();
-            if (CollUtil.isEmpty(hits)) {
-                return List.of();
+                List<Hit<KeywordHitDocument>> hits = resp.hits().hits();
+                if (CollUtil.isEmpty(hits)) {
+                    break;
+                }
+                List<RetrievedChunk> pageCandidates = hits.stream().map(this::toChunk).toList();
+                List<RetrievedChunk> fresh = freshnessGate.filter(ProjectionTarget.ELASTICSEARCH,
+                        pageCandidates, topK - accepted.size());
+                for (RetrievedChunk chunk : fresh) {
+                    if (acceptedIds.add(chunk.getId())) {
+                        accepted.add(chunk);
+                    }
+                    if (accepted.size() == topK) {
+                        break;
+                    }
+                }
             }
-            return hits.stream()
-                    .map(this::toChunk)
-                    .toList();
+            return accepted;
         } catch (Exception e) {
-            log.error("ES 关键词检索失败, index={}, collections={}, query={}", index, collectionNames, query, e);
-            return List.of();
+            log.error("ES 关键词检索失败, index={}, collectionCount={}",
+                    index, collectionNames == null ? 0 : collectionNames.size(), e);
+            throw new IllegalStateException("Elasticsearch query failed", e);
         }
     }
 
@@ -97,9 +124,13 @@ public class EsKeywordRetrieverService implements KeywordRetrieverService {
         String content = source == null || source.getContent() == null ? "" : source.getContent();
         float score = hit.score() == null ? 0f : hit.score().floatValue();
         return RetrievedChunk.builder()
-                .id(hit.id())
+                .id(source == null ? hit.id() : source.getChunkId())
                 .text(content)
                 .score(score)
+                .kbId(source == null ? null : source.getKbId())
+                .docId(source == null ? null : source.getDocId())
+                .chunkIndex(source == null ? null : source.getChunkIndex())
+                .contentVersion(source == null ? null : source.getContentVersion())
                 .build();
     }
 
@@ -109,5 +140,10 @@ public class EsKeywordRetrieverService implements KeywordRetrieverService {
     private static class KeywordHitDocument {
 
         private String content;
+        private String kbId;
+        private String docId;
+        private String chunkId;
+        private Integer chunkIndex;
+        private Long contentVersion;
     }
 }

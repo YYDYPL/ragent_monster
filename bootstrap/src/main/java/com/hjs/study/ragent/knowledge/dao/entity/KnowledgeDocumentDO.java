@@ -79,6 +79,12 @@ public class KnowledgeDocumentDO {
     private Integer chunkCount;
 
     /**
+     * 检索内容版本。只有影响可检索 Chunk 的变更才会递增。
+     */
+    @Builder.Default
+    private Long contentVersion = 0L;
+
+    /**
      * 文件地址（存 OSS / NFS 等路径）
      */
     private String fileUrl;

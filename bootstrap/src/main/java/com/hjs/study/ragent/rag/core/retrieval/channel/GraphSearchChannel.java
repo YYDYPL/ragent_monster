@@ -21,9 +21,10 @@ import cn.hutool.core.collection.CollUtil;
 import com.hjs.study.ragent.framework.convention.RetrievedChunk;
 import com.hjs.study.ragent.rag.config.GraphProperties;
 import com.hjs.study.ragent.rag.config.SearchChannelProperties;
-import com.hjs.study.ragent.rag.core.graph.LightRagClient;
+import com.hjs.study.ragent.rag.core.graph.LightRagWorkspaceRetriever;
 import com.hjs.study.ragent.rag.core.intent.NodeScore;
 import com.hjs.study.ragent.rag.core.intent.NodeScoreFilters;
+import com.hjs.study.ragent.rag.projection.service.ProjectionFreshnessGate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -39,8 +40,7 @@ import java.util.List;
  * <p>
  * 与其他通道并行执行，结果统一进 RRF 融合，通道间无先后与优先级之分
  * <p>
- * 说明：LightRAG /query 无 per-request workspace，单实例即单图，本通道 Phase1 面向全局图召回；
- * 按 KB 隔离子图（借 file_path 归属过滤或多实例）留待后续阶段。mode=intent 时无 KB 意图则跳过，语义对齐关键词通道
+ * 每个知识库对应一个独立实例；有知识库意图时定向检索，无意图时对健康实例做受控 fan-out。
  */
 @Slf4j
 @Component
@@ -48,15 +48,10 @@ import java.util.List;
 @ConditionalOnProperty(prefix = "rag.graph", name = "type", havingValue = "lightrag")
 public class GraphSearchChannel implements SearchChannel {
 
-    /**
-     * 过滤时向 LightRAG 的请求量上浮倍数
-     * 结果侧过滤在 top_k 截断后再筛掉跨库证据，命中库证据可能变少，过滤时多取以补召回
-     */
-    private static final int FILTER_TOPK_BOOST = 3;
-
-    private final LightRagClient lightRagClient;
+    private final LightRagWorkspaceRetriever workspaceRetriever;
     private final GraphProperties graphProperties;
     private final SearchChannelProperties properties;
+    private final ProjectionFreshnessGate freshnessGate;
 
     @Override
     public String getName() {
@@ -76,16 +71,18 @@ public class GraphSearchChannel implements SearchChannel {
     @Override
     public SearchChannelResult search(SearchContext context) {
         long startTime = System.currentTimeMillis();
+        freshnessGate.resetStats();
         try {
-            // 有 KB 意图则收敛到命中库过滤，否则空集=查全局图不过滤（与向量通道自动作用域一致：意图优先、无意图全局）
+            // 有 KB 意图只查询对应实例；无意图则对所有健康且启用的 workspace fan-out。
             List<String> collections = extractIntentCollections(context);
 
-            int baseTopK = context.getBudget().recallBudget();
-            // 过滤生效时上浮请求量补召回；全局不过滤则用基础量
-            int topK = CollUtil.isEmpty(collections) ? baseTopK : baseTopK * FILTER_TOPK_BOOST;
+            int topK = context.getBudget().recallBudget();
             String queryMode = graphProperties.getLightrag().getQueryMode();
 
-            List<RetrievedChunk> chunks = lightRagClient.retrieve(context.getMainQuestion(), queryMode, topK, collections);
+            LightRagWorkspaceRetriever.RetrievalResult retrieval = workspaceRetriever.retrieve(
+                    context.getMainQuestion(), queryMode, topK, collections);
+            List<RetrievedChunk> chunks = retrieval.chunks();
+            ProjectionFreshnessGate.GateStats gateStats = freshnessGate.consumeStats();
 
             long latency = System.currentTimeMillis() - startTime;
             log.info("图谱检索完成，范围={}，检索到 {} 个证据，耗时 {}ms",
@@ -96,10 +93,14 @@ public class GraphSearchChannel implements SearchChannel {
                     .channelName(getName())
                     .chunks(chunks)
                     .latencyMs(latency)
+                    .staleDropped(gateStats.staleDropped())
+                    .projectionLagMs(gateStats.projectionLagMs())
+                    .degradedReason(retrieval.degradedReason())
                     .build();
         } catch (Exception e) {
+            ProjectionFreshnessGate.GateStats gateStats = freshnessGate.consumeStats();
             log.error("图谱检索失败", e);
-            return emptyResult(startTime);
+            return emptyResult(startTime, gateStats, "graph-query-failed:" + e.getClass().getSimpleName());
         }
     }
 
@@ -116,12 +117,16 @@ public class GraphSearchChannel implements SearchChannel {
         return NodeScoreFilters.kbCollections(allScores);
     }
 
-    private SearchChannelResult emptyResult(long startTime) {
+    private SearchChannelResult emptyResult(long startTime, ProjectionFreshnessGate.GateStats gateStats,
+                                            String degradedReason) {
         return SearchChannelResult.builder()
                 .channelType(SearchChannelType.GRAPH)
                 .channelName(getName())
                 .chunks(List.of())
                 .latencyMs(System.currentTimeMillis() - startTime)
+                .staleDropped(gateStats.staleDropped())
+                .projectionLagMs(gateStats.projectionLagMs())
+                .degradedReason(degradedReason)
                 .build();
     }
 }

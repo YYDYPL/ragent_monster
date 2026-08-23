@@ -21,6 +21,9 @@ import cn.hutool.core.util.StrUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.hjs.study.ragent.framework.exception.ServiceException;
 import com.hjs.study.ragent.rag.controller.vo.GraphViewVO;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.hjs.study.ragent.rag.projection.dao.entity.GraphWorkspaceBindingDO;
+import com.hjs.study.ragent.rag.projection.dao.mapper.GraphWorkspaceBindingMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
@@ -33,8 +36,8 @@ import java.util.Set;
 /**
  * 知识图谱可视化查询服务
  * <p>
- * 后台可视化的查询入口：经 {@link LightRagClient} 取图，映射为前端视图 {@link GraphViewVO}
- * 图谱通道未启用（rag.graph.type=none）时无 LightRagClient bean，直接以业务异常提示，路由本身始终存在
+ * 后台可视化的查询入口：经知识库专属 LightRAG workspace 取图，映射为前端视图 {@link GraphViewVO}。
+ * 图谱通道未启用（rag.graph.type=none）时直接以业务异常提示，路由本身始终存在。
  * <p>
  * 只依赖 LightRAG 归一化后的图谱语义，不直连 Neo4j：无需在后端引入图数据库驱动与连接配置，换存储亦不受影响
  */
@@ -42,44 +45,60 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class GraphQueryService {
 
-    private final ObjectProvider<LightRagClient> lightRagClientProvider;
+    private final ObjectProvider<LightRagWorkspaceClient> lightRagClientProvider;
+    private final GraphWorkspaceBindingMapper workspaceMapper;
 
     /**
      * 查询图谱子图
      *
      * @param entity     起点实体名，空则取全图
-     * @param collection 知识库 collectionName，限定只看该库子图，空则不限
+     * @param kbId       知识库 ID，对应一个独立 LightRAG 实例
      * @param doc        文档 id，限定只看该文档子图，优先级高于 collection，空则不限
      * @param depth      子图深度，非正取默认 2
      * @param limit      节点上限，非正取默认 200，上限 1000
      */
-    public GraphViewVO getGraph(String entity, String collection, String doc, int depth, int limit) {
-        LightRagClient client = requireClient();
+    public GraphViewVO getGraph(String kbId, String entity, String doc, int depth, int limit) {
+        if (StrUtil.isBlank(kbId)) {
+            throw new ServiceException("必须先选择知识库");
+        }
+        requireHealthyWorkspace(kbId);
         int maxDepth = depth > 0 ? depth : 2;
         int maxNodes = limit > 0 ? Math.min(limit, 1000) : 200;
         String label = StrUtil.isNotBlank(entity) ? entity : "*";
         // 范围过滤 token：文档最细粒度优先（docId 雪花唯一），否则按知识库 {collectionName}_ 前缀
-        // 与 LightRagClient.deleteByCollection/deleteByDoc 同款约定，命中节点 properties.file_path 承载的来源
+        // 节点 properties.file_path 承载来源信息。
         String token = null;
         if (StrUtil.isNotBlank(doc)) {
             token = doc;
-        } else if (StrUtil.isNotBlank(collection)) {
-            token = collection + "_";
         }
         // 有范围过滤时向 LightRAG 拉宽到服务端上限，保证按 file_path 过滤后仍有足量节点
         int fetchNodes = token != null ? 1000 : maxNodes;
-        return mapGraph(client.fetchGraph(label, maxDepth, fetchNodes), token, maxNodes);
+        return mapGraph(requireClient().fetchGraph(kbId, label, maxDepth, fetchNodes), token, maxNodes);
     }
 
     /**
      * 检索实体标签，供可视化搜索框；keyword 为空取热门标签
      */
-    public List<String> searchEntities(String keyword, int limit) {
-        return requireClient().fetchLabels(keyword, limit);
+    public List<String> searchEntities(String kbId, String keyword, int limit) {
+        if (StrUtil.isBlank(kbId)) {
+            throw new ServiceException("必须先选择知识库");
+        }
+        requireHealthyWorkspace(kbId);
+        return requireClient().fetchLabels(kbId, keyword, limit);
     }
 
-    private LightRagClient requireClient() {
-        LightRagClient client = lightRagClientProvider.getIfAvailable();
+    private void requireHealthyWorkspace(String kbId) {
+        long count = workspaceMapper.selectCount(Wrappers.lambdaQuery(GraphWorkspaceBindingDO.class)
+                .eq(GraphWorkspaceBindingDO::getKbId, kbId)
+                .eq(GraphWorkspaceBindingDO::getEnabled, 1)
+                .eq(GraphWorkspaceBindingDO::getHealthStatus, "HEALTHY"));
+        if (count != 1) {
+            throw new ServiceException("知识库图谱 workspace 未启用或不健康");
+        }
+    }
+
+    private LightRagWorkspaceClient requireClient() {
+        LightRagWorkspaceClient client = lightRagClientProvider.getIfAvailable();
         if (client == null) {
             throw new ServiceException("知识图谱通道未启用（rag.graph.type=none）");
         }

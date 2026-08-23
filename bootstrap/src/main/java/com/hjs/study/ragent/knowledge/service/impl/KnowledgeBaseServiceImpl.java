@@ -45,6 +45,8 @@ import com.hjs.study.ragent.rag.core.vector.VectorSpaceId;
 import com.hjs.study.ragent.rag.core.vector.VectorSpaceSpec;
 import com.hjs.study.ragent.rag.core.vector.VectorStoreAdmin;
 import com.hjs.study.ragent.rag.service.FileStorageService;
+import com.hjs.study.ragent.rag.projection.service.ProjectionCoordinator;
+import com.hjs.study.ragent.rag.projection.service.GraphWorkspaceService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -69,6 +71,8 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     private final FileStorageService fileStorageService;
     private final MessageQueueProducer messageQueueProducer;
     private final BizChangeLogContext bizChangeLogContext;
+    private final ProjectionCoordinator projectionCoordinator;
+    private final GraphWorkspaceService graphWorkspaceService;
 
     @Value("knowledge-base-cleanup_topic${unique-name:}")
     private String cleanupTopic;
@@ -116,6 +120,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
                 .build();
 
         knowledgeBaseMapper.insert(kbDO);
+        graphWorkspaceService.ensureBinding(kbDO.getId());
 
         // 在全局知识库桶下建立该知识库目录（幂等），collectionName 即目录名
         fileStorageService.createKnowledgeSpace(requestParam.getCollectionName());
@@ -255,6 +260,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
                 "知识库删除清理",
                 event,
                 arg -> {
+                    projectionCoordinator.knowledgeBaseDeleted(kbId, kbDO.getCollectionName());
                     kbDO.setUpdatedBy(operator);
                     int rows = knowledgeBaseMapper.deleteById(kbDO);
                     if (rows == 0) {

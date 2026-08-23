@@ -43,12 +43,16 @@ public class KeywordProperties {
     private Es es = new Es();
 
     /**
-     * 全部知识库共用的物理索引名称
+     * 检索使用读别名
      * <p>
      * 与 Milvus 共享 collection、PG 共享表同构：单索引承载所有知识库，按 collection_name 字段区分
      */
     public String sharedIndex() {
-        return es.getIndex();
+        return es.getReadAlias();
+    }
+
+    public String writeIndex() {
+        return es.getWriteAlias();
     }
 
     @Data
@@ -62,7 +66,28 @@ public class KeywordProperties {
         /**
          * 共享索引名称：所有知识库的关键词数据都写在此索引，按 collection_name 字段过滤
          */
-        private String index = "rag_keyword_store";
+        private String physicalIndex = "rag_keyword_v2_000001";
+
+        /** 版本化物理索引模板名称。 */
+        private String indexTemplate = "rag_keyword_v2";
+
+        /** 模板仅匹配受控的 v2 物理索引。 */
+        private String indexPattern = "rag_keyword_v2_*";
+
+        /** 查询只允许走读别名。 */
+        private String readAlias = "rag_keyword_read";
+
+        /** 投影写入只允许走写别名。 */
+        private String writeAlias = "rag_keyword_write";
+
+        /** 最小权限 Elasticsearch API Key，生产环境必须由密钥注入。 */
+        private String apiKey = "";
+
+        /** 私有 CA PEM 路径；生产 TLS 使用自签 CA 时必须配置。 */
+        private String caCertificate = "";
+
+        /** 期望的服务端精确版本。 */
+        private String requiredVersion = "8.19.19";
 
         /**
          * 写入分词器

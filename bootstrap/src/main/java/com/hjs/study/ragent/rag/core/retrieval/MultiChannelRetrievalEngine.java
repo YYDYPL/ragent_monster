@@ -20,6 +20,9 @@ package com.hjs.study.ragent.rag.core.retrieval;
 import cn.hutool.core.collection.CollUtil;
 import com.hjs.study.ragent.framework.convention.RetrievedChunk;
 import com.hjs.study.ragent.framework.trace.RagTraceNode;
+import com.hjs.study.ragent.framework.trace.RagTraceContext;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hjs.study.ragent.rag.service.RagTraceRecordService;
 import com.hjs.study.ragent.rag.core.retrieval.channel.SearchChannel;
 import com.hjs.study.ragent.rag.core.retrieval.channel.SearchChannelResult;
 import com.hjs.study.ragent.rag.core.retrieval.channel.SearchContext;
@@ -32,6 +35,8 @@ import org.springframework.stereotype.Service;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
@@ -52,6 +57,8 @@ public class MultiChannelRetrievalEngine {
     private final List<SearchChannel> searchChannels;
     private final List<SearchResultPostProcessor> postProcessors;
     private final Executor ragRetrievalExecutor;
+    private final RagTraceRecordService traceRecordService;
+    private final ObjectMapper objectMapper;
 
     /**
      * 执行多通道检索（仅 KB 场景）
@@ -67,12 +74,46 @@ public class MultiChannelRetrievalEngine {
 
         // 【阶段1：多通道并行检索】
         List<SearchChannelResult> channelResults = executeSearchChannels(context);
+        recordProjectionTrace(channelResults);
         if (CollUtil.isEmpty(channelResults)) {
             return List.of();
         }
 
         // 【阶段2：后置处理器链】
         return executePostProcessors(channelResults, context);
+    }
+
+    private void recordProjectionTrace(List<SearchChannelResult> results) {
+        String traceId = RagTraceContext.getTraceId();
+        String nodeId = RagTraceContext.currentNodeId();
+        if (traceId == null || nodeId == null || results == null) {
+            return;
+        }
+        try {
+            int staleDropped = results.stream().mapToInt(SearchChannelResult::getStaleDropped).sum();
+            long projectionLagMs = results.stream().mapToLong(SearchChannelResult::getProjectionLagMs)
+                    .max().orElse(0L);
+            String degradedReason = results.stream().map(SearchChannelResult::getDegradedReason)
+                    .filter(Objects::nonNull).filter(reason -> !reason.isBlank())
+                    .distinct().collect(Collectors.joining("; "));
+            List<Map<String, Object>> channels = results.stream().map(result -> {
+                Map<String, Object> channel = new LinkedHashMap<>();
+                channel.put("channel", result.getChannelName());
+                channel.put("staleDropped", result.getStaleDropped());
+                channel.put("projectionLagMs", result.getProjectionLagMs());
+                channel.put("degradedReason", result.getDegradedReason());
+                channel.put("resultCount", result.getChunks() == null ? 0 : result.getChunks().size());
+                return channel;
+            }).toList();
+            Map<String, Object> extra = new LinkedHashMap<>();
+            extra.put("staleDropped", staleDropped);
+            extra.put("projectionLagMs", projectionLagMs);
+            extra.put("degradedReason", degradedReason.isBlank() ? null : degradedReason);
+            extra.put("channels", channels);
+            traceRecordService.updateNodeExtra(traceId, nodeId, objectMapper.writeValueAsString(extra));
+        } catch (Exception ex) {
+            log.warn("写入检索投影 Trace 扩展字段失败, traceId={}", traceId, ex);
+        }
     }
 
     /**

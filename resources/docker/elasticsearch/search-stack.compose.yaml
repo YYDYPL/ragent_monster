@@ -1,0 +1,76 @@
+name: ragent-search
+
+services:
+  certificates:
+    image: ${ELASTICSEARCH_IMAGE:?Set an Elasticsearch 8.19.19 image pinned by digest}
+    user: "0"
+    command: >-
+      bash -ec '
+        test -f config/certs/ca/ca.crt || bin/elasticsearch-certutil ca --silent --pem -out config/certs/ca.zip;
+        if test -f config/certs/ca.zip; then unzip -o config/certs/ca.zip -d config/certs; fi;
+        if ! test -f config/certs/elasticsearch/elasticsearch.crt; then
+          printf "instances:\n  - name: elasticsearch\n    dns: [elasticsearch,localhost]\n    ip: [127.0.0.1]\n" > config/certs/instances.yml;
+          bin/elasticsearch-certutil cert --silent --pem --in config/certs/instances.yml
+            --ca-cert config/certs/ca/ca.crt --ca-key config/certs/ca/ca.key
+            -out config/certs/certs.zip;
+          unzip -o config/certs/certs.zip -d config/certs;
+        fi;
+        chown -R 1000:0 config/certs;
+      '
+    volumes:
+      - es-certs:/usr/share/elasticsearch/config/certs
+    networks: [ragent-internal]
+
+  elasticsearch:
+    build:
+      context: .
+      args:
+        ELASTICSEARCH_IMAGE: ${ELASTICSEARCH_IMAGE:?Pin docker.elastic.co/elasticsearch/elasticsearch:8.19.19 by digest}
+        ELASTIC_VERSION: 8.19.19
+        IK_SHA256: ${IK_SHA256:?Set the verified IK 8.19.19 archive SHA-256}
+    image: ragent/elasticsearch-ik:8.19.19-${IK_SHA256_SHORT:?Set first 12 IK SHA characters}
+    container_name: ragent-elasticsearch
+    depends_on:
+      certificates:
+        condition: service_completed_successfully
+    environment:
+      discovery.type: single-node
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:?Set a strong bootstrap password}
+      xpack.security.enabled: "true"
+      xpack.security.http.ssl.enabled: "true"
+      xpack.security.http.ssl.key: certs/elasticsearch/elasticsearch.key
+      xpack.security.http.ssl.certificate: certs/elasticsearch/elasticsearch.crt
+      xpack.security.http.ssl.certificate_authorities: certs/ca/ca.crt
+      xpack.security.transport.ssl.enabled: "true"
+      xpack.security.transport.ssl.verification_mode: certificate
+      xpack.security.transport.ssl.key: certs/elasticsearch/elasticsearch.key
+      xpack.security.transport.ssl.certificate: certs/elasticsearch/elasticsearch.crt
+      xpack.security.transport.ssl.certificate_authorities: certs/ca/ca.crt
+      cluster.routing.allocation.disk.watermark.low: 75%
+      cluster.routing.allocation.disk.watermark.high: 85%
+      cluster.routing.allocation.disk.watermark.flood_stage: 90%
+      ES_JAVA_OPTS: ${ES_JAVA_OPTS:--Xms1g -Xmx1g}
+    ports:
+      - "127.0.0.1:9200:9200"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+      - es-certs:/usr/share/elasticsearch/config/certs:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl --silent --fail --cacert config/certs/ca/ca.crt -u elastic:$${ELASTIC_PASSWORD} https://localhost:9200/_cluster/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    restart: unless-stopped
+    stop_grace_period: 60s
+    networks: [ragent-internal]
+
+volumes:
+  es-data:
+    name: ragent-es-8.19.19-data
+  es-certs:
+    name: ragent-es-certs
+
+networks:
+  ragent-internal:
+    name: ragent-internal
