@@ -6,8 +6,6 @@ services:
     image: ${NEO4J_IMAGE:?Set a verified Neo4j image pinned by digest}
     environment:
       NEO4J_AUTH: "${NEO4J_USERNAME:-neo4j}/${NEO4J_PASSWORD:?NEO4J_PASSWORD is required}"
-      NEO4J_USERNAME: ${NEO4J_USERNAME:-neo4j}
-      NEO4J_PASSWORD: ${NEO4J_PASSWORD:?NEO4J_PASSWORD is required}
       NEO4J_server_memory_heap_max__size: ${NEO4J_HEAP_MAX:-2G}
       NEO4J_server_memory_pagecache_size: ${NEO4J_PAGECACHE:-1G}
       NEO4J_dbms_security_procedures_unrestricted: "apoc.*"
@@ -15,7 +13,7 @@ services:
       - neo4j-data:/data
       - neo4j-logs:/logs
     healthcheck:
-      test: ["CMD-SHELL", "cypher-shell -u '$${NEO4J_USERNAME:-neo4j}' -p '$${NEO4J_PASSWORD}' 'RETURN 1' >/dev/null 2>&1"]
+      test: ["CMD-SHELL", "/var/lib/neo4j/bin/cypher-shell -u neo4j -p \"$${NEO4J_AUTH#*/}\" 'RETURN 1' >/dev/null 2>&1"]
       interval: 15s
       timeout: 10s
       retries: 20
@@ -32,4 +30,5 @@ volumes:
 
 networks:
   ragent-internal:
+    external: true
     name: ragent-internal
