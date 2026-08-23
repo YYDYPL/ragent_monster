@@ -66,17 +66,36 @@ public class MultiQuestionRewriteService implements QueryRewriteService {
         return rewriteAndSplit(userQuestion);
     }
 
+    /**
+     * 带历史对话的查询改写与多问句拆分入口方法。
+     *
+     * <p>处理流程：
+     * <ol>
+     *   <li>如果查询改写开关关闭，则直接执行规则归一化 + 规则拆分</li>
+     *   <li>否则先对用户问题进行术语归一化，再调用 LLM 进行改写与拆分</li>
+     * </ol>
+     *
+     * @param userQuestion 用户原始问题
+     * @param history      历史对话消息（可能为空）
+     * @return 包含改写后问题和子问题列表的结果对象
+     */
     @Override
     @RagTraceNode(name = "query-rewrite-and-split", type = "REWRITE")
     public RewriteResult rewriteWithSplit(String userQuestion, List<ChatMessage> history) {
+        // 开关关闭：走规则兜底逻辑，不做 LLM 调用
         if (!ragConfigProperties.getQueryRewriteEnabled()) {
+            // 1. 对用户问题进行术语归一化
             String normalized = queryTermMappingService.normalize(userQuestion);
+            // 2. 使用规则进行多问句拆分
             List<String> subs = ruleBasedSplit(normalized);
+            // 3. 返回归一化结果与拆分后的子问题列表
             return new RewriteResult(normalized, subs);
         }
 
+        // 开关开启：先归一化，再调用 LLM 进行改写+拆分
         String normalizedQuestion = queryTermMappingService.normalize(userQuestion);
 
+        // 调用 LLM 完成改写与拆分，传入归一化后的问题、原始问题及历史对话
         return callLLMRewriteAndSplit(normalizedQuestion, userQuestion, history);
     }
 
