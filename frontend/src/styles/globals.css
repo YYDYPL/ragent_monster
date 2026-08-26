@@ -3443,7 +3443,7 @@ textarea {
 .chat-workspace-context-tabs {
   display: grid;
   height: 47px;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   border-bottom: 1px solid #e0e5eb;
   background: #ffffff;
 }
@@ -3724,7 +3724,7 @@ textarea {
   }
 
   .chat-workspace-context-tabs {
-    grid-template-columns: 1fr 1fr 42px;
+    grid-template-columns: 1fr 42px;
   }
 
   .chat-workspace-context-close {

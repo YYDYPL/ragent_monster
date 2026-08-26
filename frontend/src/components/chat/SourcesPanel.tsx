@@ -85,17 +85,10 @@ export function SourcesPanel({ mobileOpen, onMobileOpenChange }: SourcesPanelPro
         <div className="chat-workspace-context-tabs">
           <button
             type="button"
-            className={cn(!showingCurrent && "is-active")}
+            className="is-active"
             onClick={closeSourcesPanel}
           >
             上下文
-          </button>
-          <button
-            type="button"
-            className={cn(showingCurrent && "is-active")}
-            disabled={!showingCurrent}
-          >
-            当前来源
           </button>
           <button
             type="button"

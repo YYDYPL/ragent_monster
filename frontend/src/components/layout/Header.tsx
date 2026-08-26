@@ -1,4 +1,4 @@
-import { Database, Menu, MessageSquare, PanelRight, Workflow } from "lucide-react";
+import { Menu, MessageSquare, PanelRight } from "lucide-react";
 
 import { BrandMark } from "@/components/common/BrandMark";
 import { UserAvatar } from "@/components/common/UserAvatar";
@@ -12,11 +12,6 @@ interface HeaderProps {
 
 export function Header({ onToggleSidebar, onToggleContext }: HeaderProps) {
   const user = useAuthStore((state) => state.user);
-  const isAdmin = user?.role === "admin";
-
-  const openAdminPage = (path: string) => {
-    window.open(path, "_blank", "noopener,noreferrer");
-  };
 
   return (
     <header className="chat-workspace-topbar">
@@ -41,18 +36,6 @@ export function Header({ onToggleSidebar, onToggleContext }: HeaderProps) {
           <MessageSquare className="h-4 w-4" />
           智能问答
         </button>
-        {isAdmin ? (
-          <>
-            <button type="button" onClick={() => openAdminPage("/admin/knowledge")}>
-              <Database className="h-4 w-4" />
-              知识库
-            </button>
-            <button type="button" onClick={() => openAdminPage("/admin/ingestion")}>
-              <Workflow className="h-4 w-4" />
-              数据通道
-            </button>
-          </>
-        ) : null}
       </nav>
 
       <div className="chat-workspace-topbar-actions">
