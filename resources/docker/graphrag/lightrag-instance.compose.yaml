@@ -8,6 +8,10 @@ services:
       PORT: 9621
       LIGHTRAG_API_PREFIX: ""
       LIGHTRAG_API_KEY: ${LIGHTRAG_API_KEY:?LIGHTRAG_API_KEY is required}
+      # Only the liveness endpoint is public. In particular, do not expose the
+      # Ollama-compatible /api/* routes because they can invoke the configured
+      # LLM and read workspace data without the shared API key.
+      WHITELIST_PATHS: /health
       WORKSPACE: kb_${KB_ID}
       POSTGRES_WORKSPACE: kb_${KB_ID}
       NEO4J_WORKSPACE: kb_${KB_ID}

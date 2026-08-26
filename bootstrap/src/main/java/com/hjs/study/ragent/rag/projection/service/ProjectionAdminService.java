@@ -14,7 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.hjs.study.ragent.rag.projection.service;
 
 import cn.hutool.core.util.IdUtil;
@@ -90,8 +89,9 @@ public class ProjectionAdminService {
 
     public IPage<ProjectionStateDO> page(int current, int size, String target, String status,
                                          String kbId, String docId, Date from, Date to) {
+        String normalizedTarget = StringUtils.hasText(target) ? normalizeTarget(target) : null;
         LambdaQueryWrapper<ProjectionStateDO> query = Wrappers.lambdaQuery(ProjectionStateDO.class)
-                .eq(StringUtils.hasText(target), ProjectionStateDO::getTarget, normalizeTarget(target))
+                .eq(normalizedTarget != null, ProjectionStateDO::getTarget, normalizedTarget)
                 .eq(StringUtils.hasText(status), ProjectionStateDO::getStatus,
                         StringUtils.hasText(status) ? status.toUpperCase() : null)
                 .eq(StringUtils.hasText(kbId), ProjectionStateDO::getKbId, kbId)
@@ -237,7 +237,7 @@ public class ProjectionAdminService {
     }
 
     private String normalizeTarget(String target) {
-        String normalized = target.toUpperCase();
+        String normalized = target.trim().toUpperCase();
         return "ES".equals(normalized) ? ProjectionTarget.ELASTICSEARCH.name() : normalized;
     }
 }
