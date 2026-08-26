@@ -14,9 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.hjs.study.ragent.knowledge.controller;
 
+import cn.dev33.satoken.annotation.SaCheckRole;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.hjs.study.ragent.framework.convention.Result;
 import com.hjs.study.ragent.framework.web.Results;
@@ -34,6 +34,7 @@ import org.springframework.web.bind.annotation.*;
  * 知识库 Chunk 管理接口
  */
 @RestController
+@SaCheckRole("admin")
 @RequiredArgsConstructor
 @Validated
 public class KnowledgeChunkController {

@@ -392,7 +392,7 @@ CREATE TABLE `t_user`
     `id`          bigint(20) NOT NULL COMMENT '主键ID',
     `username`    varchar(64)  NOT NULL COMMENT '用户名，唯一',
     `password`    varchar(128) NOT NULL COMMENT '密码',
-    `role`        varchar(32)  NOT NULL COMMENT '角色：admin/user',
+    `role`        varchar(32)  NOT NULL COMMENT '角色：admin/user/guest',
     `avatar`      varchar(128) DEFAULT NULL COMMENT '用户头像',
     `create_time` datetime     DEFAULT NULL COMMENT '创建时间',
     `update_time` datetime     DEFAULT NULL COMMENT '更新时间',

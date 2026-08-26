@@ -14,9 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.hjs.study.ragent.rag.controller;
 
+import cn.dev33.satoken.annotation.SaCheckRole;
 import com.hjs.study.ragent.framework.convention.Result;
 import com.hjs.study.ragent.framework.web.Results;
 import com.hjs.study.ragent.rag.controller.vo.GraphViewVO;
@@ -36,6 +36,7 @@ import java.util.List;
  * 图谱通道未启用时，服务层以业务异常提示，前端据此给出「未启用」引导，路由本身始终存在
  */
 @RestController
+@SaCheckRole("admin")
 @RequestMapping("/admin/kg")
 @RequiredArgsConstructor
 public class GraphController {

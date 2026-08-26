@@ -14,7 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.hjs.study.ragent.user.dao.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
@@ -45,7 +44,7 @@ public class UserDO {
     private String avatar;
 
     /**
-     * 角色：admin / user
+     * 角色：admin / user / guest
      */
     private String role;
 

@@ -23,7 +23,7 @@ COMMENT ON TABLE t_user IS '系统用户表';
 COMMENT ON COLUMN t_user.id IS '主键ID';
 COMMENT ON COLUMN t_user.username IS '用户名，唯一';
 COMMENT ON COLUMN t_user.password IS '密码';
-COMMENT ON COLUMN t_user.role IS '角色：admin/user';
+COMMENT ON COLUMN t_user.role IS '角色：admin/user/guest';
 COMMENT ON COLUMN t_user.avatar IS '用户头像';
 COMMENT ON COLUMN t_user.create_time IS '创建时间';
 COMMENT ON COLUMN t_user.update_time IS '更新时间';

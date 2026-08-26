@@ -92,9 +92,9 @@ export const router = createBrowserRouter([
   {
     path: "/change-logs",
     element: (
-      <RequireAuth>
+      <RequireAdmin>
         <ChangeLogsPage />
-      </RequireAuth>
+      </RequireAdmin>
     )
   },
   {

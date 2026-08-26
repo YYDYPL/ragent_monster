@@ -14,9 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.hjs.study.ragent.rag.controller;
 
+import cn.dev33.satoken.annotation.SaCheckRole;
 import com.hjs.study.ragent.framework.convention.Result;
 import com.hjs.study.ragent.framework.web.Results;
 import com.hjs.study.ragent.ingestion.service.IntentTreeService;
@@ -34,6 +34,7 @@ import java.util.List;
  * 提供意图节点树的查询、创建、更新和删除功能
  */
 @RestController
+@SaCheckRole("admin")
 @RequiredArgsConstructor
 public class IntentTreeController {
 

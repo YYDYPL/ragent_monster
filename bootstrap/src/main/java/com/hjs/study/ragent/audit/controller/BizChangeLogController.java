@@ -14,9 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.hjs.study.ragent.audit.controller;
 
+import cn.dev33.satoken.annotation.SaCheckRole;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.hjs.study.ragent.audit.controller.request.BizChangeLogPageRequest;
 import com.hjs.study.ragent.audit.controller.vo.BizChangeLogVO;
@@ -29,6 +29,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@SaCheckRole("admin")
 @RequiredArgsConstructor
 public class BizChangeLogController {
 

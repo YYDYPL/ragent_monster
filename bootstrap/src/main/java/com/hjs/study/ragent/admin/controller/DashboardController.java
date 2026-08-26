@@ -14,9 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.hjs.study.ragent.admin.controller;
 
+import cn.dev33.satoken.annotation.SaCheckRole;
 import com.hjs.study.ragent.admin.controller.vo.DashboardOverviewVO;
 import com.hjs.study.ragent.admin.controller.vo.DashboardPerformanceVO;
 import com.hjs.study.ragent.admin.controller.vo.DashboardTrendsVO;
@@ -30,6 +30,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@SaCheckRole("admin")
 @RequiredArgsConstructor
 @RequestMapping("/admin/dashboard")
 public class DashboardController {

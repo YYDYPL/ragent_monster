@@ -14,7 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.hjs.study.ragent.user.enums;
 
 import lombok.Getter;
@@ -34,7 +33,12 @@ public enum UserRole {
     /**
      * 普通用户角色
      */
-    USER("user");
+    USER("user"),
+
+    /**
+     * 公开体验游客角色
+     */
+    GUEST("guest");
 
     /**
      * 角色编码

@@ -14,9 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.hjs.study.ragent.rag.eval;
 
+import cn.dev33.satoken.annotation.SaCheckRole;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import com.hjs.study.ragent.framework.convention.Result;
@@ -45,6 +45,7 @@ import java.util.stream.Collectors;
  * 效果评测接口
  */
 @RestController
+@SaCheckRole("admin")
 @RequiredArgsConstructor
 @ConditionalOnProperty(prefix = "app.eval", name = "enabled", havingValue = "true")
 public class EvalController {

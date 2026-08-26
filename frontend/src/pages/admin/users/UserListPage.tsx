@@ -20,7 +20,8 @@ const PAGE_SIZE = 10;
 
 const roleOptions = [
   { value: "admin", label: "管理员" },
-  { value: "user", label: "成员" }
+  { value: "user", label: "成员" },
+  { value: "guest", label: "游客" }
 ];
 
 const buildEmptyForm = () => ({
@@ -146,7 +147,7 @@ export function UserListPage() {
     }
   };
 
-  const isProtectedAdmin = (user: UserItem) => user.username === "admin";
+  const isProtectedAccount = (user: UserItem) => user.username === "admin" || user.username === "guest";
 
   return (
     <div className="admin-page">
@@ -195,8 +196,8 @@ export function UserListPage() {
               </TableHeader>
               <TableBody>
                 {users.map((user) => {
-                  const isProtected = isProtectedAdmin(user);
-                  const roleLabel = user.role === "admin" ? "管理员" : "成员";
+                  const isProtected = isProtectedAccount(user);
+                  const roleLabel = user.role === "admin" ? "管理员" : user.role === "guest" ? "游客" : "成员";
                   return (
                     <TableRow key={user.id}>
                       <TableCell>
@@ -209,7 +210,7 @@ export function UserListPage() {
                           <div>
                             <div className="font-medium text-slate-900">{user.username || "-"}</div>
                             {isProtected ? (
-                              <div className="text-xs text-slate-400">默认管理员</div>
+                              <div className="text-xs text-slate-400">系统保留账号</div>
                             ) : null}
                           </div>
                         </div>

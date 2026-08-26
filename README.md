@@ -182,14 +182,15 @@ npm install
 npm run dev
 ```
 
-打开 [http://127.0.0.1:5173](http://127.0.0.1:5173)，使用初始化账号登录：
+打开 [http://127.0.0.1:5173](http://127.0.0.1:5173)。登录页默认预填公开体验账号：
 
 ```text
-用户名：admin
-密码：admin
+用户名：guest
+密码：guest
+角色：guest
 ```
 
-首次登录后请立即修改默认密码。
+游客可体验智能问答、个人会话和回答来源预览，不能访问管理后台。管理员初始账号仍为 `admin / admin`；首次登录后请立即修改管理员默认密码。公开游客账号是共享账号，不应存放私密内容。
 
 ## 默认本机端口
 
@@ -272,7 +273,8 @@ docker compose -f resources/docker/ragent-local-middleware.compose.yaml up -d
 
 ## 安全提示
 
-- 默认管理员密码、PostgreSQL 密码和 RustFS 密钥仅供本地开发。
+- 默认管理员密码、PostgreSQL 密码和 RustFS 密钥仅供本地开发；公网部署必须修改管理员密码。
+- `guest / guest` 是公开共享体验凭据，仅授予问答和来源预览能力，不应存放私密内容。
 - 不要将模型 API Key、生产数据库密码或对象存储密钥提交到 Git。
 - 生产环境应限制 PostgreSQL、Redis、RocketMQ 和对象存储的网络暴露范围。
 - 应使用独立的生产配置或环境变量覆盖 `application.yaml`。

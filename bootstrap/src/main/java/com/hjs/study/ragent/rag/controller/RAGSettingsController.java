@@ -14,9 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.hjs.study.ragent.rag.controller;
 
+import cn.dev33.satoken.annotation.SaCheckRole;
 import com.hjs.study.ragent.framework.convention.Result;
 import com.hjs.study.ragent.framework.web.Results;
 import com.hjs.study.ragent.infra.config.AIModelProperties;
@@ -43,6 +43,7 @@ import java.util.stream.Collectors;
  * RAG 设置控制器，负责系统 RAG、AI 模型等配置信息的查询
  */
 @RestController
+@SaCheckRole("admin")
 @RequiredArgsConstructor
 public class RAGSettingsController {
 

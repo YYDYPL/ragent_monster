@@ -14,7 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.hjs.study.ragent.user.service.impl;
 
 import cn.hutool.core.lang.Assert;
@@ -46,6 +45,7 @@ import org.springframework.stereotype.Service;
 public class UserServiceImpl implements UserService {
 
     private static final String DEFAULT_ADMIN_USERNAME = "admin";
+    private static final String DEFAULT_GUEST_USERNAME = "guest";
 
     private final UserMapper userMapper;
     private final BizChangeLogContext bizChangeLogContext;
@@ -85,8 +85,8 @@ public class UserServiceImpl implements UserService {
         Assert.notBlank(username, () -> new ClientException("用户名不能为空"));
         Assert.notBlank(password, () -> new ClientException("密码不能为空"));
 
-        if (DEFAULT_ADMIN_USERNAME.equalsIgnoreCase(username)) {
-            throw new ClientException("默认管理员用户名不可用");
+        if (isReservedUsername(username)) {
+            throw new ClientException("系统保留用户名不可用");
         }
         role = normalizeRole(role);
         ensureUsernameAvailable(username, null);
@@ -122,8 +122,8 @@ public class UserServiceImpl implements UserService {
             String username = StrUtil.trimToNull(requestParam.getUsername());
             Assert.notBlank(username, () -> new ClientException("用户名不能为空"));
             if (!username.equals(record.getUsername())) {
-                if (DEFAULT_ADMIN_USERNAME.equalsIgnoreCase(username)) {
-                    throw new ClientException("默认管理员用户名不可用");
+                if (isReservedUsername(username)) {
+                    throw new ClientException("系统保留用户名不可用");
                 }
                 ensureUsernameAvailable(username, record.getId());
             }
@@ -190,6 +190,9 @@ public class UserServiceImpl implements UserService {
                         .eq(UserDO::getDeleted, 0)
         );
         Assert.notNull(record, () -> new ClientException("用户不存在"));
+        if (UserRole.GUEST.getCode().equalsIgnoreCase(record.getRole())) {
+            throw new ClientException("游客体验账号不允许修改密码");
+        }
         UserVO before = toVO(record);
         if (!passwordMatches(current, record.getPassword())) {
             throw new ClientException("当前密码不正确");
@@ -210,9 +213,14 @@ public class UserServiceImpl implements UserService {
     }
 
     private void ensureNotDefaultAdmin(UserDO record) {
-        if (record != null && DEFAULT_ADMIN_USERNAME.equalsIgnoreCase(record.getUsername())) {
-            throw new ClientException("默认管理员不允许修改或删除");
+        if (record != null && isReservedUsername(record.getUsername())) {
+            throw new ClientException("系统保留账号不允许修改或删除");
         }
+    }
+
+    private boolean isReservedUsername(String username) {
+        return DEFAULT_ADMIN_USERNAME.equalsIgnoreCase(username)
+                || DEFAULT_GUEST_USERNAME.equalsIgnoreCase(username);
     }
 
     private void ensureUsernameAvailable(String username, String excludeId) {
@@ -237,6 +245,9 @@ public class UserServiceImpl implements UserService {
         }
         if (UserRole.USER.getCode().equalsIgnoreCase(value)) {
             return UserRole.USER.getCode();
+        }
+        if (UserRole.GUEST.getCode().equalsIgnoreCase(value)) {
+            return UserRole.GUEST.getCode();
         }
         throw new ClientException("角色类型不合法");
     }

@@ -14,7 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.hjs.study.ragent.user.controller.request;
 
 import lombok.Data;
@@ -36,7 +35,7 @@ public class UserCreateRequest {
     private String password;
 
     /**
-     * 角色（admin/user）
+     * 角色（admin/user/guest）
      */
     private String role;
 

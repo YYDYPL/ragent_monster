@@ -14,9 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.hjs.study.ragent.rag.controller;
 
+import cn.dev33.satoken.annotation.SaCheckRole;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.hjs.study.ragent.framework.convention.Result;
 import com.hjs.study.ragent.framework.web.Results;
@@ -36,6 +36,7 @@ import java.util.List;
  * RAG Trace 查询接口
  */
 @RestController
+@SaCheckRole("admin")
 @RequiredArgsConstructor
 public class RagTraceController {
 

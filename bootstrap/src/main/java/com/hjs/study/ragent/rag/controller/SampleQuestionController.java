@@ -14,9 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.hjs.study.ragent.rag.controller;
 
+import cn.dev33.satoken.annotation.SaCheckRole;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.hjs.study.ragent.framework.convention.Result;
 import com.hjs.study.ragent.framework.web.Results;
@@ -50,6 +50,7 @@ public class SampleQuestionController {
     /**
      * 分页查询示例问题列表
      */
+    @SaCheckRole("admin")
     @GetMapping("/sample-questions")
     public Result<IPage<SampleQuestionVO>> pageQuery(SampleQuestionPageRequest requestParam) {
         return Results.success(sampleQuestionService.pageQuery(requestParam));
@@ -58,6 +59,7 @@ public class SampleQuestionController {
     /**
      * 查询示例问题详情
      */
+    @SaCheckRole("admin")
     @GetMapping("/sample-questions/{id}")
     public Result<SampleQuestionVO> queryById(@PathVariable String id) {
         return Results.success(sampleQuestionService.queryById(id));
@@ -66,6 +68,7 @@ public class SampleQuestionController {
     /**
      * 创建示例问题
      */
+    @SaCheckRole("admin")
     @PostMapping("/sample-questions")
     public Result<String> create(@RequestBody SampleQuestionCreateRequest requestParam) {
         return Results.success(sampleQuestionService.create(requestParam));
@@ -74,6 +77,7 @@ public class SampleQuestionController {
     /**
      * 更新示例问题
      */
+    @SaCheckRole("admin")
     @PutMapping("/sample-questions/{id}")
     public Result<Void> update(@PathVariable String id, @RequestBody SampleQuestionUpdateRequest requestParam) {
         sampleQuestionService.update(id, requestParam);
@@ -83,6 +87,7 @@ public class SampleQuestionController {
     /**
      * 删除示例问题
      */
+    @SaCheckRole("admin")
     @DeleteMapping("/sample-questions/{id}")
     public Result<Void> delete(@PathVariable String id) {
         sampleQuestionService.delete(id);

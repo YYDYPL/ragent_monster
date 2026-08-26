@@ -14,9 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.hjs.study.ragent.knowledge.controller;
 
+import cn.dev33.satoken.annotation.SaCheckRole;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.hjs.study.ragent.core.chunk.ChunkingMode;
 import com.hjs.study.ragent.framework.convention.Result;
@@ -38,6 +38,7 @@ import java.util.List;
  * 提供知识库的增删改查等基础操作接口
  */
 @RestController
+@SaCheckRole("admin")
 @RequiredArgsConstructor
 public class KnowledgeBaseController {
 

@@ -13,7 +13,7 @@ export function LoginPage() {
   const { login, isLoading } = useAuthStore();
   const [showPassword, setShowPassword] = React.useState(false);
   const [remember, setRemember] = React.useState(true);
-  const [form, setForm] = React.useState({ username: "admin", password: "admin" });
+  const [form, setForm] = React.useState({ username: "guest", password: "guest" });
   const [error, setError] = React.useState<string | null>(null);
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -50,6 +50,12 @@ export function LoginPage() {
           <p className="mt-1 text-sm text-muted-foreground">
             登录后继续你的检索增强对话。
           </p>
+          <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-3 text-xs leading-5 text-blue-800">
+            <p className="font-semibold">游客体验账号已预填：guest / guest</p>
+            <p className="mt-0.5 text-blue-700">
+              可体验智能问答与回答来源预览，无法访问管理后台。管理员可手动输入管理账号登录。
+            </p>
+          </div>
         </div>
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div className="space-y-2">
@@ -96,7 +102,7 @@ export function LoginPage() {
               <Checkbox checked={remember} onCheckedChange={(value) => setRemember(Boolean(value))} />
               记住我
             </label>
-            <span className="text-xs text-muted-foreground">账号由管理员初始化</span>
+            <span className="text-xs text-muted-foreground">游客账号仅用于项目体验</span>
           </div>
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
           <Button type="submit" className="w-full" disabled={isLoading}>

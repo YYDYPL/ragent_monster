@@ -304,7 +304,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 />
                 <span className="chat-workspace-user-meta">
                   <strong>{user?.username || "用户"}</strong>
-                  <small>{user?.role === "admin" ? "管理员" : "成员"}</small>
+                  <small>{user?.role === "admin" ? "管理员" : user?.role === "guest" ? "游客" : "成员"}</small>
                 </span>
                 <MoreHorizontal className="h-4 w-4" />
               </button>

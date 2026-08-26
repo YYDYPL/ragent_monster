@@ -14,9 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.hjs.study.ragent.ingestion.controller;
 
+import cn.dev33.satoken.annotation.SaCheckRole;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hjs.study.ragent.framework.convention.Result;
@@ -33,6 +33,7 @@ import org.springframework.web.bind.annotation.*;
  * 数据摄入流水线控制层
  */
 @RestController
+@SaCheckRole("admin")
 @RequiredArgsConstructor
 @Validated
 public class IngestionPipelineController {
