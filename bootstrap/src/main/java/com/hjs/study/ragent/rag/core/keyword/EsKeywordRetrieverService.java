@@ -23,6 +23,7 @@ import co.elastic.clients.elasticsearch._types.FieldValue;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
 import co.elastic.clients.elasticsearch.core.search.Hit;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.hjs.study.ragent.framework.convention.RetrievedChunk;
 import com.hjs.study.ragent.rag.config.KeywordProperties;
 import com.hjs.study.ragent.rag.projection.model.ProjectionTarget;
@@ -137,13 +138,23 @@ public class EsKeywordRetrieverService implements KeywordRetrieverService {
     @Setter
     @Getter
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private static class KeywordHitDocument {
+    static class KeywordHitDocument {
 
         private String content;
+
+        @JsonProperty("kb_id")
         private String kbId;
+
+        @JsonProperty("doc_id")
         private String docId;
+
+        @JsonProperty("chunk_id")
         private String chunkId;
+
+        @JsonProperty("chunk_index")
         private Integer chunkIndex;
+
+        @JsonProperty("content_version")
         private Long contentVersion;
     }
 }
