@@ -108,12 +108,41 @@ public class LightRagWorkspaceClient {
         if (StrUtil.isBlank(documentId)) {
             return;
         }
-        JsonNode response = execute(kbId, "documents/" + documentId, "DELETE", null,
+        ObjectNode body = objectMapper.createObjectNode();
+        body.putArray("doc_ids").add(documentId);
+        body.put("delete_file", false);
+        body.put("delete_llm_cache", false);
+        JsonNode response = execute(kbId, "documents/delete_document", "DELETE", body,
                 true, "LIGHTRAG_DELETE");
         String status = response == null ? "" : response.path("status").asText("");
         if ("busy".equalsIgnoreCase(status)) {
             throw new ProjectionExecutionException("LightRAG 删除返回 busy", true, "LIGHTRAG_DELETE");
         }
+        if ("not_allowed".equalsIgnoreCase(status)) {
+            throw new ProjectionExecutionException("LightRAG 删除不被允许", false, "LIGHTRAG_DELETE");
+        }
+        if ("deletion_started".equalsIgnoreCase(status)) {
+            waitUntilDeleted(kbId, documentId);
+        }
+    }
+
+    /** LightRAG 删除接口是后台任务；提交同一 file_source 前必须确认旧文档已消失。 */
+    private void waitUntilDeleted(String kbId, String documentId) {
+        long deadline = System.currentTimeMillis() + 30_000L;
+        while (System.currentTimeMillis() < deadline) {
+            boolean present = listDocuments(kbId).stream()
+                    .anyMatch(document -> documentId.equals(document.documentId()));
+            if (!present) {
+                return;
+            }
+            try {
+                Thread.sleep(500L);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new ProjectionExecutionException("等待 LightRAG 删除被中断", true, "LIGHTRAG_DELETE");
+            }
+        }
+        throw new ProjectionExecutionException("LightRAG 删除未在 30 秒内完成", true, "LIGHTRAG_DELETE");
     }
 
     public HealthResult health(String kbId) {

@@ -49,8 +49,18 @@ class LightRagWorkspaceClientTest {
                 "{\"track_id\":\"track-1\"}"));
         server.createContext("/kb-kb1/documents/track_status/track-1", exchange -> respond(exchange, 200,
                 "{\"documents\":[{\"status\":\"processed\",\"document_id\":\"external-1\"}]}"));
-        server.createContext("/kb-kb1/documents/busy", exchange -> respond(exchange, 200,
-                "{\"status\":\"busy\"}"));
+        server.createContext("/kb-kb1/documents/delete_document", exchange -> {
+            String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            if (body.contains("busy")) {
+                respond(exchange, 200, "{\"status\":\"busy\"}");
+            } else if (body.contains("unauthorized")) {
+                respond(exchange, 401, "{\"detail\":\"unauthorized\"}");
+            } else {
+                respond(exchange, 200, "{\"status\":\"deletion_started\"}");
+            }
+        });
+        server.createContext("/kb-kb1/documents", exchange -> respond(exchange, 200,
+                "{\"statuses\":{\"processed\":[]}}"));
         server.createContext("/kb-kb1/documents/unauthorized", exchange -> respond(exchange, 401,
                 "{\"detail\":\"unauthorized\"}"));
         server.start();

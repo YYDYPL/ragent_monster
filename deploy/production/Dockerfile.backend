@@ -1,0 +1,8 @@
+FROM eclipse-temurin:21-jre-jammy
+
+WORKDIR /app
+COPY bootstrap/target/bootstrap-1.0-SNAPSHOT.jar /app/app.jar
+
+ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=30 -Dfile.encoding=UTF-8"
+EXPOSE 9090
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]

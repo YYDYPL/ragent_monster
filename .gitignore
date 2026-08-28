@@ -50,6 +50,10 @@ docs/temp
 # local runtime logs
 logs/
 
+# production deployment secrets
+deploy/production/.env
+deploy/production/*.tar
+
 # AI assistant workspace state
 .reasonix/
 .playwright-cli/
