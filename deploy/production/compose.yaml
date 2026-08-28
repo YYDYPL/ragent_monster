@@ -224,7 +224,12 @@ services:
     image: ragent-prod-frontend:1.0
     container_name: ragent-prod-frontend
     depends_on: [backend]
-    ports: ["0.0.0.0:80:80"]
+    # Keep the UI available on the LAN and on the WireGuard address only.
+    # Public traffic is terminated by the cloud edge and API requests are
+    # forwarded to 10.66.0.2 over WireGuard.
+    ports:
+      - "10.66.0.2:80:80"
+      - "192.168.1.14:80:80"
     mem_limit: 256m
     restart: unless-stopped
     networks: [ragent-internal]
