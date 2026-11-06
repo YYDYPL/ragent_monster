@@ -1,0 +1,6 @@
+.git
+.playwright-cli
+frontend/node_modules
+frontend/dist
+logs
+**/target/*.original

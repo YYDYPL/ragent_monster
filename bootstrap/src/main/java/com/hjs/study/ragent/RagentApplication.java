@@ -31,6 +31,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableLogRecord(tenant = "ragent", proxyTargetClass = true)
 @MapperScan(basePackages = {
         "com.hjs.study.ragent.rag.dao.mapper",
+        "com.hjs.study.ragent.rag.projection.dao.mapper",
         "com.hjs.study.ragent.ingestion.dao.mapper",
         "com.hjs.study.ragent.knowledge.dao.mapper",
         "com.hjs.study.ragent.user.dao.mapper",

@@ -57,6 +57,9 @@ public class GraphProperties {
      */
     private String embeddingModel = "";
 
+    /** 图谱侧 embedding 维度，参与 workspace 配置指纹。 */
+    private int embeddingDimension;
+
     /**
      * 是否启用 lightrag 后端
      */
@@ -67,10 +70,8 @@ public class GraphProperties {
     @Data
     public static class LightRag {
 
-        /**
-         * LightRAG server 基址
-         */
-        private String baseUrl = "http://127.0.0.1:9621";
+        /** 每个知识库独立实例的服务端确定性地址，不允许来自数据库或请求参数。 */
+        private String baseUrlTemplate = "http://ragent-lightrag-kb-{kbId}:9621";
 
         /**
          * API Key（对应 LightRAG 的 X-API-Key 头）
@@ -87,6 +88,24 @@ public class GraphProperties {
          * 请求超时（毫秒）
          */
         private int timeoutMs = 30000;
+
+        /** 单实例查询超时。 */
+        private int queryTimeoutMs = 5000;
+
+        /** 无知识库意图时 fan-out 总超时。 */
+        private int fanoutTimeoutMs = 8000;
+
+        private int maxWorkspaces = 20;
+        private int fanoutConcurrency = 4;
+
+        /** API 合约版本，参与 workspace 配置指纹。 */
+        private String apiVersion = "v1";
+
+        /** 固定镜像 digest，生产配置禁止 latest/空值。 */
+        private String imageDigest = "";
+
+        /** 只有确认所用稳定版已修复认证公告后才允许开启。 */
+        private boolean securityApproved = false;
     }
 
     @Data

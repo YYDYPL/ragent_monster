@@ -66,22 +66,47 @@ rag:
   keyword:
     type: none  # 可选 none / es
     es:
-      uris: http://127.0.0.1:9200
-      index: rag_keyword_store  # 全库共享索引，按 collection_name 字段区分知识库
+      uris: ${RAG_ES_URIS:https://127.0.0.1:9200}
+      api-key: ${RAG_ES_API_KEY:}
+      ca-certificate: ${RAG_ES_CA_CERT:}
+      required-version: 8.19.19
+      physical-index: rag_keyword_v2_000001
+      index-template: rag_keyword_v2
+      index-pattern: rag_keyword_v2_*
+      read-alias: rag_keyword_read
+      write-alias: rag_keyword_write
       analyzer: ik_max_word
       search-analyzer: ik_smart
 
   graph:
     type: none  # 图谱后端总开关，可选 none / lightrag。lightrag 即接入后端供「后台可视化 / 检索读取」；是否参与检索、是否写入分别由 rag.search.channels.graph.enabled 与下方 ingestion.enabled 独立控制
     lightrag:
-      base-url: http://127.0.0.1:9621
+      base-url-template: http://ragent-lightrag-kb-{kbId}:9621
+      api-key: ${LIGHTRAG_API_KEY:}
+      image-digest: ${LIGHTRAG_IMAGE_DIGEST:}
+      security-approved: ${LIGHTRAG_SECURITY_APPROVED:false}
+      api-version: v1
       query-mode: mix  # naive / local / global / hybrid / mix
       timeout-ms: 30000
+      query-timeout-ms: 5000
+      fanout-timeout-ms: 8000
+      max-workspaces: 20
+      fanout-concurrency: 4
     embedding-model: text-embedding-v4  # 与 LightRAG 的百炼 text-embedding-v4 配置一致
+    embedding-dimension: 1536
     ingestion:
       enabled: false           # 写入同步开关：false 冻结图谱写入（向量写不再重建图谱），仅保留可视化 / 检索读取，避免为不检索的图谱持续付出实体抽取成本；true 恢复随向量写自动同步
       async: true              # 标脏入队 + 后台防抖重建，不阻塞主写链路
       global-workspace: false  # 跨库方案B（独立全局图）；默认关，Phase1 用 fan-out 兜底
+
+  projection:
+    enabled: true
+    claim-batch-size: 20
+    lease-seconds: 90
+    scan-delay-ms: 5000
+    max-backoff-ms: 21600000
+    attempt-retention-days: 90
+    batch-retention-days: 180
 
   default:
     collection-name: rag_default_store
@@ -176,6 +201,18 @@ rag:
       4. 保持术语准确完整，表述贴近用户可能的提问方式。
       5. 最后另起一行，用一句话自然引出图片（例如"下方为该内容对应的原始图片："），以便在这段文字后紧接着展示图片。
     max-output-tokens: 4096
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: when_authorized
+  metrics:
+    tags:
+      application: ${spring.application.name}
 
 ai:
   providers:

@@ -103,9 +103,23 @@ public class RoutingEmbeddingService implements EmbeddingService {
         if (!StringUtils.hasText(modelId)) {
             throw new RemoteException("Embedding 模型ID不能为空");
         }
-        return selector.selectEmbeddingCandidates().stream()
+        List<ModelTarget> candidates = selector.selectEmbeddingCandidates();
+        ModelTarget idMatch = candidates.stream()
                 .filter(target -> modelId.equals(target.id()))
                 .findFirst()
-                .orElseThrow(() -> new RemoteException("Embedding 模型不可用: " + modelId));
+                .orElse(null);
+        if (idMatch != null) {
+            return idMatch;
+        }
+        List<ModelTarget> modelMatches = candidates.stream()
+                .filter(target -> modelId.equals(target.candidate().getModel()))
+                .toList();
+        if (modelMatches.size() == 1) {
+            return modelMatches.get(0);
+        }
+        if (modelMatches.size() > 1) {
+            throw new RemoteException("Embedding 物理模型名称存在多个候选，请改用模型ID: " + modelId);
+        }
+        throw new RemoteException("Embedding 模型不可用: " + modelId);
     }
 }

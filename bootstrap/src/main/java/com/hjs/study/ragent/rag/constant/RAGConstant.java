@@ -14,7 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.hjs.study.ragent.rag.constant;
 
 /**
@@ -41,10 +40,12 @@ public class RAGConstant {
     /**
      * 意图识别最低分数阈值
      * <p>
-     * 低于这个分数就当成"聊偏了"，不参与 RAG 检索流程
+     * 低于这个分数不用于定向路由，由检索引擎走全局知识通道兜底。
+     * 该值与 intent-classifier.st 中“低于 0.6 优先返回空数组”的约束保持一致，
+     * 避免弱 SYSTEM 意图绕过知识检索。
      * </p>
      */
-    public static final double INTENT_MIN_SCORE = 0.35;
+    public static final double INTENT_MIN_SCORE = 0.60;
 
     /**
      * 单次查询最多参与的意图数量上限

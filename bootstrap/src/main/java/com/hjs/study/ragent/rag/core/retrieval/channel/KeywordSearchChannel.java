@@ -23,6 +23,8 @@ import com.hjs.study.ragent.rag.config.SearchChannelProperties;
 import com.hjs.study.ragent.rag.core.intent.NodeScore;
 import com.hjs.study.ragent.rag.core.intent.NodeScoreFilters;
 import com.hjs.study.ragent.rag.core.keyword.KeywordRetrieverService;
+import com.hjs.study.ragent.rag.core.keyword.KeywordBackendHealth;
+import com.hjs.study.ragent.rag.projection.service.ProjectionFreshnessGate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -48,6 +50,8 @@ public class KeywordSearchChannel implements SearchChannel {
     private final KeywordRetrieverService keywordRetriever;
     private final SearchChannelProperties properties;
     private final KbCollectionProvider kbCollectionProvider;
+    private final KeywordBackendHealth backendHealth;
+    private final ProjectionFreshnessGate freshnessGate;
 
     @Override
     public String getName() {
@@ -67,15 +71,17 @@ public class KeywordSearchChannel implements SearchChannel {
     @Override
     public SearchChannelResult search(SearchContext context) {
         long startTime = System.currentTimeMillis();
+        freshnessGate.resetStats();
         try {
             List<String> collections = resolveCollections(context);
             if (CollUtil.isEmpty(collections)) {
                 log.info("关键词检索未解析到目标知识库，跳过");
-                return emptyResult(startTime);
+                return emptyResult(startTime, freshnessGate.consumeStats());
             }
 
             int topK = context.getBudget().recallBudget();
             List<RetrievedChunk> chunks = keywordRetriever.search(context.getMainQuestion(), collections, topK);
+            ProjectionFreshnessGate.GateStats gateStats = freshnessGate.consumeStats();
 
             long latency = System.currentTimeMillis() - startTime;
             log.info("关键词检索完成，知识库={}，检索到 {} 个 Chunk，耗时 {}ms", collections, chunks.size(), latency);
@@ -85,10 +91,14 @@ public class KeywordSearchChannel implements SearchChannel {
                     .channelName(getName())
                     .chunks(chunks)
                     .latencyMs(latency)
+                    .staleDropped(gateStats.staleDropped())
+                    .projectionLagMs(gateStats.projectionLagMs())
+                    .degradedReason(backendHealth.isHealthy() ? null : backendHealth.getReason())
                     .build();
         } catch (Exception e) {
+            ProjectionFreshnessGate.GateStats gateStats = freshnessGate.consumeStats();
             log.error("关键词检索失败", e);
-            return emptyResult(startTime);
+            return emptyResult(startTime, gateStats, "elasticsearch-query-failed");
         }
     }
 
@@ -122,12 +132,21 @@ public class KeywordSearchChannel implements SearchChannel {
         return NodeScoreFilters.kbCollections(allScores);
     }
 
-    private SearchChannelResult emptyResult(long startTime) {
+    private SearchChannelResult emptyResult(long startTime, ProjectionFreshnessGate.GateStats gateStats) {
+        return emptyResult(startTime, gateStats, null);
+    }
+
+    private SearchChannelResult emptyResult(long startTime, ProjectionFreshnessGate.GateStats gateStats,
+                                            String degradedReason) {
         return SearchChannelResult.builder()
                 .channelType(SearchChannelType.KEYWORD)
                 .channelName(getName())
                 .chunks(List.of())
                 .latencyMs(System.currentTimeMillis() - startTime)
+                .staleDropped(gateStats.staleDropped())
+                .projectionLagMs(gateStats.projectionLagMs())
+                .degradedReason(degradedReason != null ? degradedReason
+                        : (backendHealth.isHealthy() ? null : backendHealth.getReason()))
                 .build();
     }
 }

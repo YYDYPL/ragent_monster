@@ -1,0 +1,249 @@
+name: ragent-production
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.2-pg15-bookworm
+    container_name: ragent-prod-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      TZ: Asia/Shanghai
+    volumes:
+      - ragent-prod-postgres:/var/lib/postgresql/data
+      - ../../resources/database/schema_pg.sql:/docker-entrypoint-initdb.d/10-schema.sql:ro
+      - ../../resources/database/init_data_pg.sql:/docker-entrypoint-initdb.d/20-init-data.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    mem_limit: 768m
+    restart: unless-stopped
+    networks: [ragent-internal]
+
+  redis:
+    image: redis:6.2
+    container_name: ragent-prod-redis
+    command: >-
+      sh -c 'if [ -n "$${REDIS_PASSWORD}" ]; then
+      exec redis-server --appendonly yes --requirepass "$${REDIS_PASSWORD}";
+      else exec redis-server --appendonly yes; fi'
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    volumes:
+      - ragent-prod-redis:/data
+    healthcheck:
+      test: ["CMD-SHELL", "if [ -n \"$${REDIS_PASSWORD}\" ]; then redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep -q PONG; else redis-cli ping | grep -q PONG; fi"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 256m
+    restart: unless-stopped
+    networks: [ragent-internal]
+
+  namesrv:
+    image: apache/rocketmq:5.5.0
+    container_name: ragent-prod-namesrv
+    environment:
+      JAVA_OPT_EXT: -Xms128m -Xmx256m
+    command: sh mqnamesrv
+    healthcheck:
+      test: ["CMD-SHELL", "grep -q 'The Name Server boot success' /home/rocketmq/logs/rocketmqlogs/namesrv.log"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    mem_limit: 384m
+    restart: unless-stopped
+    networks: [ragent-internal]
+
+  broker:
+    image: apache/rocketmq:5.5.0
+    container_name: ragent-prod-broker
+    environment:
+      NAMESRV_ADDR: namesrv:9876
+      JAVA_OPT_EXT: -Xms256m -Xmx512m
+    depends_on:
+      namesrv: {condition: service_healthy}
+    command:
+      - sh
+      - -c
+      - |
+        cat > /home/rocketmq/rocketmq-5.5.0/conf/broker.conf << EOF
+        brokerClusterName = DefaultCluster
+        brokerName = broker-a
+        brokerId = 0
+        deleteWhen = 04
+        fileReservedTime = 48
+        brokerRole = ASYNC_MASTER
+        flushDiskType = ASYNC_FLUSH
+        brokerIP1 = broker
+        EOF
+        sh mqbroker -c /home/rocketmq/rocketmq-5.5.0/conf/broker.conf
+    mem_limit: 768m
+    restart: unless-stopped
+    networks: [ragent-internal]
+
+  rustfs:
+    image: rustfs/rustfs:1.0.0-alpha.72
+    container_name: ragent-prod-rustfs
+    command: ["--address", ":9000", "--console-enable", "--access-key", "${RUSTFS_ACCESS_KEY}", "--secret-key", "${RUSTFS_SECRET_KEY}", "/data"]
+    environment:
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
+      RUSTFS_CONSOLE_ENABLE: "true"
+    volumes:
+      - ragent-prod-rustfs:/data
+    healthcheck:
+      test: ["CMD", "sh", "-c", "wget -qO- http://localhost:9000/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    mem_limit: 512m
+    restart: unless-stopped
+    networks: [ragent-internal]
+
+  certificates:
+    image: ${ELASTICSEARCH_IMAGE}
+    user: "0"
+    command: >-
+      bash -ec 'mkdir -p config/certs;
+      test -f config/certs/ca/ca.crt || bin/elasticsearch-certutil ca --silent --pem -out config/certs/ca.zip;
+      if test -f config/certs/ca.zip; then unzip -o config/certs/ca.zip -d config/certs; fi;
+      if ! test -f config/certs/elasticsearch/elasticsearch.crt; then
+      printf "instances:\n  - name: elasticsearch\n    dns: [elasticsearch,localhost]\n    ip: [127.0.0.1]\n" > config/certs/instances.yml;
+      bin/elasticsearch-certutil cert --silent --pem --in config/certs/instances.yml --ca-cert config/certs/ca/ca.crt --ca-key config/certs/ca/ca.key --out config/certs/certs.zip;
+      unzip -o config/certs/certs.zip -d config/certs; fi; chown -R 1000:0 config/certs'
+    volumes: [ragent-prod-es-certs:/usr/share/elasticsearch/config/certs]
+    networks: [ragent-internal]
+
+  elasticsearch:
+    image: ragent-prod-elasticsearch-ik:8.19.19-${IK_SHA256_SHORT}
+    container_name: ragent-prod-elasticsearch
+    environment:
+      discovery.type: single-node
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD}
+      xpack.security.enabled: "true"
+      xpack.security.http.ssl.enabled: "true"
+      xpack.security.http.ssl.key: certs/elasticsearch/elasticsearch.key
+      xpack.security.http.ssl.certificate: certs/elasticsearch/elasticsearch.crt
+      xpack.security.http.ssl.certificate_authorities: certs/ca/ca.crt
+      xpack.security.transport.ssl.enabled: "true"
+      xpack.security.transport.ssl.verification_mode: certificate
+      xpack.security.transport.ssl.key: certs/elasticsearch/elasticsearch.key
+      xpack.security.transport.ssl.certificate: certs/elasticsearch/elasticsearch.crt
+      xpack.security.transport.ssl.certificate_authorities: certs/ca/ca.crt
+      cluster.routing.allocation.disk.watermark.low: 75%
+      cluster.routing.allocation.disk.watermark.high: 85%
+      cluster.routing.allocation.disk.watermark.flood_stage: 90%
+      ES_JAVA_OPTS: ${ES_JAVA_OPTS}
+    depends_on:
+      certificates: {condition: service_completed_successfully}
+    volumes:
+      - ragent-prod-es-data:/usr/share/elasticsearch/data
+      - ragent-prod-es-certs:/usr/share/elasticsearch/config/certs:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl --silent --fail --cacert config/certs/ca/ca.crt -u elastic:$${ELASTIC_PASSWORD} https://localhost:9200/_cluster/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    mem_limit: 1g
+    restart: unless-stopped
+    networks: [ragent-internal]
+
+  neo4j:
+    image: ${NEO4J_IMAGE}
+    container_name: ragent-prod-neo4j
+    environment:
+      NEO4J_AUTH: ${NEO4J_USERNAME}/${NEO4J_PASSWORD}
+      NEO4J_server_memory_heap_max__size: 768m
+      NEO4J_server_memory_pagecache_size: 384m
+      NEO4J_dbms_security_procedures_unrestricted: apoc.*
+    volumes:
+      - ragent-prod-neo4j-data:/data
+      - ragent-prod-neo4j-logs:/logs
+    healthcheck:
+      test: ["CMD-SHELL", "/var/lib/neo4j/bin/cypher-shell -u neo4j -p \"$${NEO4J_AUTH#*/}\" 'RETURN 1' >/dev/null 2>&1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 45s
+    mem_limit: 1.5g
+    restart: unless-stopped
+    networks: [ragent-internal]
+
+  mcp:
+    image: ragent-prod-mcp:1.0
+    container_name: ragent-prod-mcp
+    environment:
+      YDC_API_KEY: ${YDC_API_KEY}
+    mem_limit: 256m
+    restart: unless-stopped
+    networks: [ragent-internal]
+
+  backend:
+    image: ragent-prod-backend:1.0
+    container_name: ragent-prod-backend
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}?client_encoding=UTF8
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_DATA_REDIS_DATABASE: 15
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      ROCKETMQ_NAME_SERVER: namesrv:9876
+      RAG_STORAGE_S3_ENDPOINT: http://rustfs:9000
+      RAG_STORAGE_S3_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
+      RAG_STORAGE_S3_SECRET_KEY: ${RUSTFS_SECRET_KEY}
+      RAG_ES_URIS: https://elasticsearch:9200
+      RAG_ES_API_KEY: ${RAG_ES_API_KEY}
+      RAG_ES_CA_CERT: /run/secrets/ca/ca.crt
+      LIGHTRAG_API_KEY: ${LIGHTRAG_API_KEY}
+      YDC_API_KEY: ${YDC_API_KEY}
+      BAILIAN_API_KEY: ${BAILIAN_API_KEY}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      MINERU_API_KEY: ${MINERU_API_KEY}
+      SPRING_CONFIG_ADDITIONAL_LOCATION: optional:file:/app/config/application-production.yaml
+    volumes:
+      - ragent-prod-es-certs:/run/secrets:ro
+      - ./application-production.yaml:/app/config/application-production.yaml:ro
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      namesrv: {condition: service_healthy}
+      broker: {condition: service_started}
+      rustfs: {condition: service_healthy}
+      elasticsearch: {condition: service_healthy}
+    mem_limit: 2g
+    restart: unless-stopped
+    networks: [ragent-internal]
+
+  frontend:
+    image: ragent-prod-frontend:1.0
+    container_name: ragent-prod-frontend
+    depends_on: [backend]
+    # Keep the UI available on the LAN and on the WireGuard address only.
+    # Public traffic is terminated by the cloud edge and API requests are
+    # forwarded to 10.66.0.2 over WireGuard.
+    ports:
+      - "10.66.0.2:80:80"
+      - "192.168.1.14:80:80"
+    mem_limit: 256m
+    restart: unless-stopped
+    networks: [ragent-internal]
+
+networks:
+  ragent-internal:
+    external: true
+    name: ragent-prod-internal
+
+volumes:
+  ragent-prod-postgres: {name: ragent-prod-postgres}
+  ragent-prod-redis: {name: ragent-prod-redis}
+  ragent-prod-rustfs: {name: ragent-prod-rustfs}
+  ragent-prod-es-data: {name: ragent-prod-es-data}
+  ragent-prod-es-certs: {name: ragent-prod-es-certs}
+  ragent-prod-neo4j-data: {name: ragent-prod-neo4j-data}
+  ragent-prod-neo4j-logs: {name: ragent-prod-neo4j-logs}

@@ -1,0 +1,56 @@
+groups:
+  - name: ragent-projections
+    rules:
+      - alert: ElasticsearchProjectionSloViolated
+        expr: rag_projection_max_lag_ms{target="ELASTICSEARCH"} > 60000
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: "ES 投影延迟超过 60 秒"}
+
+      - alert: LightRagProjectionSloViolated
+        expr: rag_projection_max_lag_ms{target="LIGHTRAG"} > 900000
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: "LightRAG 投影延迟超过 15 分钟"}
+
+      - alert: ProjectionBlocked
+        expr: rag_projection_blocked > 0
+        for: 1m
+        labels: {severity: critical}
+        annotations: {summary: "存在不可重试的投影任务"}
+
+      - alert: ElasticsearchChannelUnhealthy
+        expr: rag_elasticsearch_healthy == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations: {summary: "Elasticsearch 关键词通道不健康"}
+
+      - alert: LightRagWorkspaceUnhealthy
+        expr: rag_graph_workspace_unhealthy > 0
+        for: 2m
+        labels: {severity: critical}
+        annotations: {summary: "存在不健康的 LightRAG workspace"}
+
+      - alert: ProjectionBacklogGrowing
+        expr: rag_projection_backlog > 100
+        for: 10m
+        labels: {severity: warning}
+        annotations: {summary: "检索投影积压超过 100"}
+
+      - alert: ElasticsearchDiskUsageHigh
+        expr: rag_elasticsearch_disk_usage_percent > 80
+        for: 5m
+        labels: {severity: critical}
+        annotations: {summary: "Elasticsearch 存储使用率超过 80%"}
+
+      - alert: ElasticsearchProjectionP99SloViolated
+        expr: histogram_quantile(0.99, sum by (le) (rate(rag_projection_lag_seconds_bucket{target="ELASTICSEARCH"}[30m]))) > 60
+        for: 10m
+        labels: {severity: warning}
+        annotations: {summary: "Elasticsearch 投影 P99 超过 60 秒"}
+
+      - alert: LightRagProjectionP99SloViolated
+        expr: histogram_quantile(0.99, sum by (le) (rate(rag_projection_lag_seconds_bucket{target="LIGHTRAG"}[2h]))) > 900
+        for: 10m
+        labels: {severity: warning}
+        annotations: {summary: "LightRAG 投影 P99 超过 15 分钟"}

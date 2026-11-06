@@ -11,6 +11,7 @@ import { KnowledgeListPage } from "@/pages/admin/knowledge/KnowledgeListPage";
 import { KnowledgeDocumentsPage } from "@/pages/admin/knowledge/KnowledgeDocumentsPage";
 import { KnowledgeChunksPage } from "@/pages/admin/knowledge/KnowledgeChunksPage";
 import { KnowledgeGraphPage } from "@/pages/admin/knowledge-graph/KnowledgeGraphPage";
+import { ProjectionPage } from "@/pages/admin/projections/ProjectionPage";
 import { BizChangeLogPage } from "@/pages/admin/change-logs/BizChangeLogPage";
 import { IntentTreePage } from "@/pages/admin/intent-tree/IntentTreePage";
 import { IntentListPage } from "@/pages/admin/intent-tree/IntentListPage";
@@ -136,6 +137,10 @@ export const router = createBrowserRouter([
       {
         path: "knowledge-graph",
         element: <KnowledgeGraphPage />
+      },
+      {
+        path: "projections",
+        element: <ProjectionPage />
       },
       {
         path: "intent-tree",

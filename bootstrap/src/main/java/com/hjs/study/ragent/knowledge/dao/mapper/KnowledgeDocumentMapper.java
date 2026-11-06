@@ -19,6 +19,16 @@ package com.hjs.study.ragent.knowledge.dao.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.hjs.study.ragent.knowledge.dao.entity.KnowledgeDocumentDO;
+import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Update;
 
 public interface KnowledgeDocumentMapper extends BaseMapper<KnowledgeDocumentDO> {
+
+    /**
+     * 在业务事务内原子递增内容版本，避免并发编辑丢失版本。
+     */
+    @Update("UPDATE t_knowledge_document "
+            + "SET content_version = content_version + 1, update_time = CURRENT_TIMESTAMP "
+            + "WHERE id = #{docId} AND deleted = 0")
+    int incrementContentVersion(@Param("docId") String docId);
 }

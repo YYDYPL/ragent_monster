@@ -1,0 +1,68 @@
+server:
+  address: 0.0.0.0
+
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres:5432/${POSTGRES_DB:ragent}?client_encoding=UTF8
+    username: ${POSTGRES_USER:postgres}
+    password: ${POSTGRES_PASSWORD}
+  data:
+    redis:
+      host: redis
+      port: 6379
+      database: 15
+      password: ${REDIS_PASSWORD:}
+
+rocketmq:
+  name-server: namesrv:9876
+
+rag:
+  storage:
+    type: s3
+    s3:
+      endpoint: http://rustfs:9000
+      access-key: ${RUSTFS_ACCESS_KEY}
+      secret-key: ${RUSTFS_SECRET_KEY}
+      path-style: true
+  keyword:
+    type: es
+    es:
+      uris: https://elasticsearch:9200
+      api-key: ${RAG_ES_API_KEY}
+      ca-certificate: /run/secrets/ca/ca.crt
+  graph:
+    type: lightrag
+    lightrag:
+      base-url-template: http://ragent-lightrag-kb-{kbId}:9621
+      api-key: ${LIGHTRAG_API_KEY}
+      image-digest: sha256:ab23a9c83a735901b18c8960b6b482b602d5b6291abb7e07c5776f7bb2da504e
+      security-approved: true
+    ingestion:
+      enabled: true
+      async: true
+  mcp:
+    servers:
+      - name: default
+        url: http://mcp:9099
+  search:
+    channels:
+      vector:
+        enabled: true
+      keyword:
+        enabled: true
+      graph:
+        enabled: true
+      web-search:
+        enabled: true
+        api-key: ${YDC_API_KEY}
+
+ai:
+  providers:
+    bailian:
+      api-key: ${BAILIAN_API_KEY}
+      url: ${BAILIAN_URL:https://dashscope.aliyuncs.com}
+    deepseek:
+      api-key: ${DEEPSEEK_API_KEY}
+
+mineru:
+  api-key: ${MINERU_API_KEY}

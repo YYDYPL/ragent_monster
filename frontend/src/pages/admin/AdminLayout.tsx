@@ -87,6 +87,11 @@ const menuGroups: MenuGroup[] = [
         icon: Share2
       },
       {
+        path: "/admin/projections",
+        label: "搜索投影",
+        icon: Search
+      },
+      {
         id: "intent",
         path: "/admin/intent-tree",
         label: "意图管理",
@@ -167,6 +172,7 @@ const breadcrumbMap: Record<string, string> = {
   dashboard: "Dashboard",
   knowledge: "知识库管理",
   "knowledge-graph": "知识图谱",
+  projections: "搜索投影",
   "intent-tree": "意图树配置",
   "intent-list": "意图列表",
   ingestion: "数据通道",

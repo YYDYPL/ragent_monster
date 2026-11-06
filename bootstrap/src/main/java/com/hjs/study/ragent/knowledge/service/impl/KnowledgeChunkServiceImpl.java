@@ -51,6 +51,7 @@ import com.hjs.study.ragent.knowledge.dao.mapper.KnowledgeDocumentMapper;
 import com.hjs.study.ragent.knowledge.enums.DocumentStatus;
 import com.hjs.study.ragent.knowledge.service.KnowledgeChunkService;
 import com.hjs.study.ragent.rag.core.vector.VectorStoreService;
+import com.hjs.study.ragent.rag.projection.service.ProjectionCoordinator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -78,6 +79,7 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
     private final VectorStoreService vectorStoreService;
     private final TransactionOperations transactionOperations;
     private final BizChangeLogContext bizChangeLogContext;
+    private final ProjectionCoordinator projectionCoordinator;
 
     @Override
     public IPage<KnowledgeChunkVO> pageQuery(String docId, KnowledgeChunkPageRequest requestParam) {
@@ -158,6 +160,7 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
 
         // 同步写入向量库
         syncChunkToVector(collectionName, docId, chunkDO, embeddingModel);
+        projectionCoordinator.documentChanged(docId);
 
         bizChangeLogContext.put(String.valueOf(chunkDO.getId()), null, chunkDO);
         return BeanUtil.toBean(chunkDO, KnowledgeChunkVO.class);
@@ -305,6 +308,7 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
                         .embedding(toArray(embedContent(newContent, embeddingModel)))
                         .build()
         );
+        projectionCoordinator.documentChanged(docId);
         bizChangeLogContext.put(chunkId, before, chunkMapper.selectById(chunkId));
     }
 
@@ -344,6 +348,7 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
         log.info("删除 Chunk 成功, kbId={}, docId={}, chunkId={}", documentDO.getKbId(), docId, chunkId);
 
         deleteChunkFromVector(collectionName, chunkId);
+        projectionCoordinator.documentChanged(docId);
         bizChangeLogContext.put(chunkId, before, null);
     }
 
@@ -392,6 +397,7 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
         } else {
             deleteChunkFromVector(collectionName, chunkId);
         }
+        projectionCoordinator.documentChanged(docId);
         bizChangeLogContext.put(chunkId, before, chunkMapper.selectById(chunkId));
     }
 
@@ -473,6 +479,7 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
                                 .set(KnowledgeChunkDO::getUpdatedBy, UserContext.getUsername())
                 );
                 vectorStoreService.indexDocumentChunks(collectionName, docId, vectorChunks);
+                projectionCoordinator.documentChanged(docId);
             });
         } else {
             transactionOperations.executeWithoutResult(status -> {
@@ -483,6 +490,7 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
                                 .set(KnowledgeChunkDO::getUpdatedBy, UserContext.getUsername())
                 );
                 vectorStoreService.deleteChunksByIds(collectionName, needUpdateIds);
+                projectionCoordinator.documentChanged(docId);
             });
         }
 

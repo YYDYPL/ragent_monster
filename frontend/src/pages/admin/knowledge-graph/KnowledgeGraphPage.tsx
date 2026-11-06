@@ -1038,7 +1038,7 @@ export function KnowledgeGraphPage() {
   const [docsLoading, setDocsLoading] = useState(false);
   const [activeDoc, setActiveDoc] = useState<KnowledgeDocument | null>(null);
   // 当前范围（collection/doc），用 ref 保存以免 setState 同一 tick 过期，loadGraph 从此读取
-  const scopeRef = useRef<{ collection?: string; doc?: string }>({});
+  const scopeRef = useRef<{ kbId?: string; doc?: string }>({});
 
   // 渲染图谱：每次加载重建实例，规避样式回调闭包过期
   const renderGraph = useCallback((data: GraphView) => {
@@ -1377,12 +1377,18 @@ export function KnowledgeGraphPage() {
 
   const loadGraph = useCallback(
     async (entity?: string, overrides?: { depth?: number; limit?: number }) => {
+      const kbId = scopeRef.current.kbId;
+      if (!kbId) {
+        setErrorMsg("请先选择知识库，再加载对应的独立图谱");
+        setView(null);
+        return;
+      }
       setLoading(true);
       setErrorMsg(null);
       try {
         const result = await getKnowledgeGraph({
+          kbId,
           entity: entity || undefined,
-          collection: scopeRef.current.collection,
           doc: scopeRef.current.doc,
           depth: overrides?.depth ?? Number(depth),
           limit: overrides?.limit ?? Number(limit)
@@ -1409,9 +1415,8 @@ export function KnowledgeGraphPage() {
     [depth, limit, renderGraph]
   );
 
-  // 首次进入加载全图
+  // 页面卸载时释放图实例；首次进入必须先由管理员选择知识库。
   useEffect(() => {
-    void loadGraph();
     return () => {
       stopEdgeFlow();
       stopEntrance();
@@ -1474,7 +1479,11 @@ export function KnowledgeGraphPage() {
     const word = keyword.trim();
     let active = true;
     const handle = window.setTimeout(() => {
-      searchGraphEntities(word, 10)
+      if (!activeKb) {
+        setSuggestions([]);
+        return;
+      }
+      searchGraphEntities(activeKb.id, word, 10)
         .then((list) => {
           if (active) {
             setSuggestions(list || []);
@@ -1490,7 +1499,7 @@ export function KnowledgeGraphPage() {
       active = false;
       window.clearTimeout(handle);
     };
-  }, [keyword, suggestOpen]);
+  }, [activeKb, keyword, suggestOpen]);
 
   // 齿轮 / 范围弹层点击外部关闭
   useEffect(() => {
@@ -1533,14 +1542,13 @@ export function KnowledgeGraphPage() {
     void loadGraph(keyword.trim());
   };
 
-  // 全图：清空实体聚焦与库/文档范围，回到真·全局全图
+  // 全图：保持当前知识库，仅清空实体与文档范围。
   const handleReset = () => {
     setKeyword("");
     setSuggestOpen(false);
-    setActiveKb(null);
     setActiveDoc(null);
     setDocs([]);
-    scopeRef.current = {};
+    scopeRef.current = { kbId: activeKb?.id };
     void loadGraph();
   };
 
@@ -1613,26 +1621,24 @@ export function KnowledgeGraphPage() {
     }
   }, []);
 
-  // 选知识库：切库并清文档选择，重载该库子图（传 null 表示全部知识库）
-  const handleSelectKb = (kb: KnowledgeBase | null) => {
+  // 选知识库：切库并清文档选择；不存在跨 workspace 的“全部知识库”视图。
+  const handleSelectKb = (kb: KnowledgeBase) => {
     setActiveKb(kb);
     setActiveDoc(null);
     setDocs([]);
-    scopeRef.current = { collection: kb?.collectionName };
-    if (kb) {
-      void loadKbDocs(kb.id);
-    }
+    scopeRef.current = { kbId: kb.id };
+    void loadKbDocs(kb.id);
     void loadGraph(activeEntity || undefined);
   };
 
   // 选文档：重载该文档子图（传 null 表示整个知识库）
   const handleSelectDoc = (doc: KnowledgeDocument | null) => {
     setActiveDoc(doc);
-    scopeRef.current = { collection: activeKb?.collectionName, doc: doc?.id };
+    scopeRef.current = { kbId: activeKb?.id, doc: doc?.id };
     void loadGraph(activeEntity || undefined);
   };
 
-  const scopeLabel = activeDoc ? activeDoc.docName : activeKb ? activeKb.name : "全部";
+  const scopeLabel = activeDoc ? activeDoc.docName : activeKb ? activeKb.name : "选择知识库";
   const stats = view ? { nodes: view.nodes.length, edges: view.edges.length } : null;
   const isEmpty = !loading && !errorMsg && view !== null && view.nodes.length === 0;
 
@@ -1706,18 +1712,6 @@ export function KnowledgeGraphPage() {
                 <div>
                   <div className="mb-1.5 text-xs font-medium text-slate-500">知识库</div>
                   <div className="max-h-40 space-y-1 overflow-auto">
-                    <button
-                      type="button"
-                      onClick={() => handleSelectKb(null)}
-                      className={cn(
-                        "block w-full truncate rounded-lg border px-2.5 py-1 text-left text-sm transition",
-                        !activeKb
-                          ? "border-indigo-500 bg-indigo-50 text-indigo-600"
-                          : "border-slate-200 text-slate-600 hover:bg-slate-50"
-                      )}
-                    >
-                      全部知识库
-                    </button>
                     {kbs.map((kb) => (
                       <button
                         key={kb.id}

@@ -50,10 +50,17 @@
         <batik.version>1.18</batik.version>
         <!-- OkHttp HTTP 客户端 -->
         <okhttp.version>4.12.0</okhttp.version>
+        <!-- 生产 Elasticsearch 基线，必须与服务端和 IK 插件完全同版 -->
+        <elasticsearch.version>8.19.19</elasticsearch.version>
         <!-- MCP Java SDK -->
         <mcp-sdk.version>1.1.2</mcp-sdk.version>
         <!-- Spotless 代码格式化插件 -->
         <spotless-maven-plugin.version>2.22.1</spotless-maven-plugin.version>
+        <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
+        <maven-surefire-plugin.version>3.2.5</maven-surefire-plugin.version>
+        <testcontainers.version>1.21.3</testcontainers.version>
+        <!-- Surefire 的延迟替换占位；覆盖率工具可在执行时追加此属性。 -->
+        <argLine></argLine>
     </properties>
 
     <!-- 依赖版本托管区：这里只管版本，不代表当前父模块一定会直接引入这些依赖 -->
@@ -190,6 +197,25 @@
                 <version>${okhttp.version}</version>
             </dependency>
 
+            <dependency>
+                <groupId>co.elastic.clients</groupId>
+                <artifactId>elasticsearch-java</artifactId>
+                <version>${elasticsearch.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.elasticsearch.client</groupId>
+                <artifactId>elasticsearch-rest-client</artifactId>
+                <version>${elasticsearch.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-bom</artifactId>
+                <version>${testcontainers.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
             <!-- MCP 协议核心 SDK -->
             <dependency>
                 <groupId>io.modelcontextprotocol.sdk</groupId>
@@ -255,6 +281,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
+                <version>${maven-compiler-plugin.version}</version>
                 <configuration>
                     <source>${java.version}</source>
                     <target>${java.version}</target>
@@ -280,6 +307,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
+                <version>${maven-surefire-plugin.version}</version>
                 <configuration>
                     <argLine>@{argLine} -javaagent:${org.mockito:mockito-core:jar}</argLine>
                 </configuration>

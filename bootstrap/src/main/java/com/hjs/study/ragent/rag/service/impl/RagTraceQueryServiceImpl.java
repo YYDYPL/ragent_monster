@@ -206,6 +206,7 @@ public class RagTraceQueryServiceImpl implements RagTraceQueryService {
                 .methodName(node.getMethodName())
                 .status(node.getStatus())
                 .errorMessage(node.getErrorMessage())
+                .extraData(node.getExtraData())
                 .durationMs(node.getDurationMs())
                 .startTime(node.getStartTime())
                 .endTime(node.getEndTime())

@@ -77,6 +77,7 @@ import com.hjs.study.ragent.knowledge.service.KnowledgeDocumentScheduleService;
 import com.hjs.study.ragent.knowledge.service.KnowledgeDocumentService;
 import com.hjs.study.ragent.rag.core.vector.VectorSpaceId;
 import com.hjs.study.ragent.rag.core.vector.VectorStoreService;
+import com.hjs.study.ragent.rag.projection.service.ProjectionCoordinator;
 import com.hjs.study.ragent.rag.dto.StoredFileDTO;
 import com.hjs.study.ragent.rag.service.FileStorageService;
 import lombok.RequiredArgsConstructor;
@@ -117,6 +118,7 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
     private final KnowledgeScheduleProperties scheduleProperties;
     private final RemoteFileFetcher remoteFileFetcher;
     private final BizChangeLogContext bizChangeLogContext;
+    private final ProjectionCoordinator projectionCoordinator;
 
     @Value("knowledge-document-chunk_topic${unique-name:}")
     private String chunkTopic;
@@ -304,6 +306,7 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
                     .updatedBy(UserContext.getUsername())
                     .build();
             documentMapper.updateById(updateDocumentDO);
+            projectionCoordinator.documentChanged(docId);
         });
         return chunks.size();
     }
@@ -493,6 +496,8 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
             throw new ClientException("文档正在分块中，无法删除");
         }
 
+        String collectionName = resolveCollectionName(documentDO.getKbId());
+        projectionCoordinator.documentDeleted(documentDO, collectionName);
         knowledgeChunkService.deleteByDocId(docId);
         scheduleService.deleteByDocId(docId);
         chunkLogMapper.delete(Wrappers.lambdaQuery(KnowledgeDocumentChunkLogDO.class)
@@ -502,7 +507,6 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
         documentDO.setUpdatedBy(UserContext.getUsername());
         documentMapper.deleteById(documentDO);
 
-        String collectionName = resolveCollectionName(documentDO.getKbId());
         vectorStoreService.deleteDocumentVectors(collectionName, docId);
         deleteStoredFileQuietly(documentDO);
         bizChangeLogContext.put(docId, before, null);
@@ -771,6 +775,7 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
             } else if (CollUtil.isNotEmpty(finalVectorChunks)) {
                 vectorStoreService.indexDocumentChunks(collectionName, docId, finalVectorChunks);
             }
+            projectionCoordinator.documentChanged(docId);
         });
         bizChangeLogContext.put(docId, before, documentMapper.selectById(docId));
     }

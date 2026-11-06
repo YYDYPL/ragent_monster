@@ -54,6 +54,15 @@ public class SearchChannelResult {
      */
     private long latencyMs;
 
+    /** 新鲜度门控丢弃的过期/无来源候选数。 */
+    private int staleDropped;
+
+    /** 命中投影从期望产生到成功应用的最大延迟。 */
+    private long projectionLagMs;
+
+    /** 通道或部分 workspace 降级原因。 */
+    private String degradedReason;
+
     /**
      * 扩展元数据
      */
