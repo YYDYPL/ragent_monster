@@ -7,6 +7,7 @@ Ragent Monster 是一个面向 Java 生态的企业级 Agentic RAG 平台，覆�
 ## 文档导航
 
 - [完整使用手册](docs/USER_GUIDE.md)：安装、配置、功能操作、API、运维与排障
+- [bootstrap 模块学习文档](docs/BOOTSTRAP_LEARNING.md)：源码架构、核心链路、扩展点与阅读路线
 - [PDF 摄取流水线示例](docs/examples/pdf-ingestion-example.md)
 - [版本发布记录](docs/releases/README.md)
 - [本机中间件 Compose](resources/docker/ragent-local-middleware.compose.yaml)

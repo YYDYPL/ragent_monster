@@ -141,8 +141,14 @@ public class ProjectionCoordinator {
         return projectionId;
     }
 
-    /** 管理端重建/对账使用当前版本重新排队，不伪造一次内容变更。 */
-    @Transactional(rollbackFor = Exception.class)
+    /**
+     * 管理端重建/对账使用当前版本重新排队，不伪造一次内容变更。
+     * <p>
+     * 批量重建会逐文档尝试多个投影目标。目标后端未启用时属于可预期的业务失败，
+     * 不应把调用方的整个批事务标记为 rollback-only；否则外层捕获异常后，事务提交
+     * 阶段仍会抛 UnexpectedRollbackException，页面只显示“系统执行出错”。
+     */
+    @Transactional(rollbackFor = Exception.class, noRollbackFor = IllegalStateException.class)
     public String requeueCurrentDocument(String docId, ProjectionTarget target) {
         KnowledgeDocumentDO document = documentMapper.selectById(docId);
         if (document == null) {
